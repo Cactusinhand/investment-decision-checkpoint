@@ -35,6 +35,8 @@ import {
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { RiskAssessment, RiskAssessmentResult } from './components/risk-assessment';
+import { riskProfiles } from './components/risk-assessment';
 
 // Mock Data & Types
 interface UserProfile {
@@ -487,6 +489,19 @@ const translations = {
     informationValidation: 'Information Validation',
     cognitiveBias: 'Cognitive Bias Checking',
     documentationReview: 'Documentation & Review',
+    riskAssessmentTitle: 'Risk Tolerance Assessment',
+    riskToleranceScore: 'Your Risk Tolerance Score',
+    riskType: 'Risk Type',
+    riskDescription: 'Description',
+    investmentRecommendation: 'Investment Recommendation',
+    doneButton: 'Done',
+    submitAssessment: 'Submit Assessment',
+    financialCapacity: 'Financial Capacity',
+    investmentGoals: 'Investment Goals',
+    psychologicalTolerance: 'Psychological Tolerance',
+    investmentExperience: 'Investment Experience',
+    personalInfo: 'Personal Information',
+    pleaseAnswerAllQuestions: 'Please answer all required questions before submitting',
     shortTerm: 'Short-term',
     mediumTerm: 'Medium-term',
     longTerm: 'Long-term',
@@ -579,6 +594,19 @@ const translations = {
     informationValidation: '信息验证',
     cognitiveBias: '认知偏差检查',
     documentationReview: '文档与审查',
+    riskAssessmentTitle: '风险承受能力评估',
+    riskToleranceScore: '您的风险承受能力评分',
+    riskType: '风险类型',
+    riskDescription: '特征描述',
+    investmentRecommendation: '投资建议',
+    doneButton: '完成',
+    submitAssessment: '提交评估',
+    financialCapacity: '财务能力评估',
+    investmentGoals: '投资目标与期限',
+    psychologicalTolerance: '心理承受测试',
+    investmentExperience: '投资经验与知识',
+    personalInfo: '个人基本信息',
+    pleaseAnswerAllQuestions: '请回答所有必填问题后再提交',
     shortTerm: '短期',
     mediumTerm: '中期',
     longTerm: '长期',
@@ -693,10 +721,14 @@ const termTranslations: { [key: string]: string } = {
   'options hedging': '期权对冲',
   'herd behavior': '羊群效应',
   'anchoring bias': '锚定偏差',
-  'PE': 'PE',
-  'PB': 'PB',
+  'PE': '市盈率',
+  'PB': '市净率',
   'ROE': 'ROE',
   'MACD': 'MACD',
+  'ATR': 'ATR',
+  'EBITDA': 'EBITDA',
+  'DCF': '现金流折现',
+  'IRR': '内部收益率',
   'RSI': 'RSI',
   'volatility': '波动率',
   'Sharpe ratio': '夏普比率',
@@ -730,7 +762,10 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<'en' | 'zh'>('en'); // 'en' for English, 'zh' for Chinese
   const [translatedQuestions, setTranslatedQuestions] = useState<{ [key: number]: Question[] }>(rawQuestions);
   const [isLoggedIn, setIsLoggedIn] = useState(true); // Simulate logged-in state
-
+  // 添加风险评估的开关状态
+  const [isRiskAssessmentOpen, setIsRiskAssessmentOpen] = useState(false);
+  // 添加风险评估结果状态
+  const [riskAssessmentResult, setRiskAssessmentResult] = useState<RiskAssessmentResult | null>(null);
 
   // Load decisions from local storage on initial load
   useEffect(() => {
@@ -753,6 +788,20 @@ const App: React.FC = () => {
       localStorage.setItem('investmentDecisions', JSON.stringify(decisions));
     }
   }, [decisions]);
+
+  // 添加处理风险评估完成的回调
+  const handleRiskAssessmentComplete = (result: RiskAssessmentResult) => {
+    // 保存完整的风险评估结果
+    setRiskAssessmentResult(result);
+
+    // 更新用户风险承受能力
+    if (user) {
+      setUser({
+        ...user,
+        riskTolerance: result.name
+      });
+    }
+  };
 
   // Apply theme
   useEffect(() => {
@@ -864,6 +913,15 @@ const App: React.FC = () => {
     }
     setError(null); // Clear any previous errors
   }, [decisions, language, isLoggedIn]);
+
+  // 取消当前决策编辑过程
+  const cancelDecision = () => {
+    // 如果当前有编辑中的决策，清除它
+    setCurrentDecision(null);
+    setCurrentStage(1);
+    setIsEditing(false);
+    setError(null);
+  };
 
   // Handle input changes within a stage
   const handleInputChange = (questionId: string, value: any) => {
@@ -1595,7 +1653,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Top Navigation Bar */}
       <nav className="bg-white dark:bg-gray-800 shadow-md py-4">
         <div className="container mx-auto flex justify-between items-center px-4">
@@ -1666,7 +1724,83 @@ const App: React.FC = () => {
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
                     {translations[language].riskTolerance}:
                   </span>
-                  <p className="text-gray-900 dark:text-white">{user?.riskTolerance}</p>
+                  <div className="flex items-center justify-between">
+                    <div className="relative group">
+                      <p className="text-gray-900 dark:text-white cursor-help border-b border-dotted border-gray-500">
+                        {/* 查找对应的风险类型并根据当前语言显示名称 */}
+                        {(() => {
+                          // 如果没有评估结果，直接显示user中的风险承受能力
+                          if (!user?.riskTolerance) return '';
+
+                          // 查找对应的风险类型
+                          for (const [type, profile] of Object.entries(riskProfiles)) {
+                            if (profile.zh.name === user.riskTolerance ||
+                              profile.en.name === user.riskTolerance) {
+                              // 返回当前语言对应的名称
+                              return profile[language].name;
+                            }
+                          }
+
+                          // 如果没找到匹配的，返回原始值
+                          return user.riskTolerance;
+                        })()}
+                      </p>
+
+                      {/* 悬浮提示 */}
+                      <div className="absolute left-0 w-64 px-4 py-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg 
+                                    opacity-0 invisible group-hover:opacity-100 group-hover:visible 
+                                    transition-all duration-300 z-10 -translate-y-full -mt-2">
+                        {(() => {
+                          // 如果没有评估结果，显示简单提示
+                          if (!riskAssessmentResult) {
+                            return language === 'zh'
+                              ? '点击"评估风险"按钮进行风险评估'
+                              : 'Click "Assess Risk" button to evaluate risk';
+                          }
+
+                          // 使用当前语言显示评估结果
+                          const result = riskAssessmentResult;
+
+                          // 查找对应的风险类型完整信息
+                          let profileInfo;
+                          for (const [type, profile] of Object.entries(riskProfiles)) {
+                            if (profile.zh.name === result.name ||
+                              profile.en.name === result.name) {
+                              profileInfo = profile[language];
+                              break;
+                            }
+                          }
+
+                          return (
+                            <>
+                              <div className="font-bold mb-1">
+                                {language === 'zh' ? '风险类型' : 'Risk Type'}: {profileInfo?.name || result.name}
+                              </div>
+                              <div className="mb-1">
+                                {language === 'zh' ? '风险评分' : 'Risk Score'}: {result.score}
+                              </div>
+                              <div className="mb-1 text-xs">
+                                {language === 'zh' ? '特征描述' : 'Description'}: {profileInfo?.description || result.description}
+                              </div>
+                              <div className="text-xs">
+                                {language === 'zh' ? '投资建议' : 'Recommendation'}: {profileInfo?.recommendation || result.recommendation}
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsRiskAssessmentOpen(true)}
+                      className="text-xs"
+                    >
+                      <AlertCircle className="h-3 w-3 mr-1" />
+                      {language === 'zh' ? '评估风险' : 'Assess Risk'}
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
@@ -1779,32 +1913,43 @@ const App: React.FC = () => {
                                 {translations[language].decisionName} <span className="text-red-500">*</span>
                               </label>
                               <Input
+                                type="text"
                                 value={currentDecision.name || ''}
                                 onChange={(e) => setCurrentDecision({
                                   ...currentDecision,
-                                  name: e.target.value
+                                  name: e.target.value,
                                 })}
+                                className="w-full dark:bg-gray-700 dark:border-gray-600"
                                 placeholder={translations[language].enterDecisionName}
-                                className="dark:bg-gray-800 dark:text-white"
-                                required
                               />
                             </div>
                           </CardDescription>
                         </div>
-                        {isEditing && (
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            onClick={() => {
-                              if (currentDecision) {
-                                handleDeleteDecision(currentDecision.id);
-                              }
-                            }}
-                            className="ml-4 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-500"
+                        <div className="flex items-center gap-2">
+                          {/* 添加关闭按钮 */}
+                          <button
+                            onClick={cancelDecision}
+                            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            aria-label="Close"
                           >
-                            <Trash2 className="h-5 w-5" />
-                          </Button>
-                        )}
+                            <X className="h-6 w-6" />
+                          </button>
+
+                          {isEditing && (
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              onClick={() => {
+                                if (currentDecision) {
+                                  handleDeleteDecision(currentDecision.id);
+                                }
+                              }}
+                              className="ml-4 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-500"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-4 mt-2">
                         <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
@@ -1995,6 +2140,14 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* 风险评估组件 */}
+      <RiskAssessment
+        isOpen={isRiskAssessmentOpen}
+        onClose={() => setIsRiskAssessmentOpen(false)}
+        language={language}
+        onComplete={handleRiskAssessmentComplete}
+      />
     </div>
   );
 };

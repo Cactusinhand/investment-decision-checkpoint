@@ -1,4 +1,3 @@
-// 风险评估问题类型定义
 export interface Question {
   id: string;
   textZh: string;
@@ -10,31 +9,42 @@ export interface Question {
   };
   required: boolean;
   category:
-  | "financial"
-  | "goal"
-  | "psychological"
-  | "experience"
-  | "demographic";
+    | "financial"
+    | "goal"
+    | "psychological"
+    | "experience"
+    | "demographic";
 }
 
-// 风险评估结果类型定义
-export interface RiskAssessmentResult {
-  score: number;
-  type: string;
-  name: string;
-  description: string;
-  recommendation: string;
-  needsVerification?: boolean; // 标记是否需要进一步验证
-  needsWarning?: boolean; // 标记是否需要显示风险警告
-}
-
-// 风险评估答案类型定义
-export type RiskAssessmentAnswers = Record<string, any>;
-
-// 风险类型定义
 export interface RiskProfile {
   name: string;
   description: string;
   recommendation: string;
   scoreRange: [number, number];
 }
+
+// 风险评估答案类型
+export interface RiskAssessmentAnswers {
+  [key: string]: string | string[];
+}
+
+export interface RiskAssessmentProps {
+  isOpen: boolean;
+  onClose: () => void;
+  language: 'en' | 'zh';
+  onComplete: (result: RiskAssessmentResult) => void;
+}
+
+// 重写RiskAssessmentResult类型，保持与../types/index.ts中的兼容
+export interface RiskAssessmentResult {
+  name: string;
+  score: number;
+  description: string;
+  recommendation: string;
+  type?: string;
+  needsVerification?: boolean;
+  needsWarning?: boolean;
+}
+
+// 不需要从全局导入
+// export { RiskAssessmentResult };

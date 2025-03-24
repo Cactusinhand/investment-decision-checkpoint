@@ -3,15 +3,17 @@ import { riskProfiles } from './RiskProfiles';
 import { riskAssessmentQuestions, riskAssessmentWeights } from './RiskAssessmentQuestions';
 
 // 从选项文本中提取分数
-export const extractScoreFromOption = (optionText: string, language: 'zh' | 'en'): number => {
+export const extractScoreFromOption = (optionText: string | string[], language: 'zh' | 'en'): number => {
+  // 如果是数组，转换为字符串处理
+  const text = Array.isArray(optionText) ? optionText.join(', ') : optionText;
   // 中文格式："XX（Yf分）"或"XX（+Y分）"
   // 英文格式："XX (Y points)"或"XX (+Y point)"
   let scoreMatch;
 
   if (language === 'zh') {
-    scoreMatch = optionText.match(/（([+-]?\d+)分[）)]/);
+    scoreMatch = text.match(/（([+-]?\d+)分[）)]/);
   } else {
-    scoreMatch = optionText.match(/\(([+-]?\d+) points?\)/i);
+    scoreMatch = text.match(/\(([+-]?\d+) points?\)/i);
   }
 
   if (scoreMatch && scoreMatch[1]) {
@@ -204,10 +206,10 @@ export const calculateRiskScore = (
 
   return {
     score: Math.round(finalScore),
-    type: riskType,
     name: riskProfiles[riskType][language].name,
     description: riskProfiles[riskType][language].description,
     recommendation: riskProfiles[riskType][language].recommendation,
+    type: riskType,
     needsVerification, // 添加标记，指示是否需要进一步验证
     needsWarning // 添加标记，指示是否需要显示风险警告
   };

@@ -11,6 +11,13 @@ import {
   STAGE_WEIGHTS 
 } from '../../../constants';
 
+// 导入真实的API函数
+import {
+  analyzeLogicConsistency,
+  analyzeRiskConsistency,
+  analyzeCognitiveBiases
+} from '../api/deepseekAPI';
+
 // 评估第一阶段：目标与风险
 const evaluateStage1 = (answers: Record<string, any>): StageScore => {
   let score = 60; // 基础分
@@ -771,11 +778,15 @@ const evaluateStage5 = (answers: Record<string, any>): StageScore => {
         const riskManagement = decision.answers['4-1'] || '';
         
         if (buyRules && sellRules && riskManagement) {
+          // 获取止损规则
+          const stopLossRules = decision.answers['3-3'] || '';
+          
           apiAnalysisPromises.push(
             analyzeLogicConsistency(
               apiKey,
               buyRules,
-              `${sellRules}; ${decision.answers['3-3'] || ''}`,
+              sellRules,
+              stopLossRules,
               riskManagement,
               language
             ).then(result => ({ logicConsistency: result }))
@@ -914,74 +925,3 @@ const evaluateStage5 = (answers: Record<string, any>): StageScore => {
     
     return errors;
   };
-
-// 声明API分析函数类型
-interface APIAnalysisFunctions {
-  analyzeLogicConsistency: (
-    apiKey: string,
-    buyRules: string,
-    sellRules: string,
-    riskManagement: string,
-    language?: string
-  ) => Promise<DeepSeekAnalysisResult>;
-  
-  analyzeRiskConsistency: (
-    apiKey: string,
-    riskTolerance: string,
-    riskIdentification: string,
-    maxLoss: string,
-    language?: string
-  ) => Promise<DeepSeekAnalysisResult>;
-  
-  analyzeCognitiveBiases: (
-    apiKey: string,
-    biasesAwareness: string,
-    biasMitigation: string,
-    language?: string
-  ) => Promise<DeepSeekAnalysisResult>;
-}
-
-// 实现API分析函数（简化版，实际项目中应当实现完整功能）
-const analyzeLogicConsistency = async (
-  apiKey: string,
-  buyRules: string,
-  sellRules: string,
-  riskManagement: string,
-  language: string = 'zh'
-): Promise<DeepSeekAnalysisResult> => {
-  // 实际项目中应当调用API
-  return {
-    consistencyScore: 7,
-    conflictPoints: [],
-    suggestions: ['完善止损规则的具体触发条件']
-  };
-};
-
-const analyzeRiskConsistency = async (
-  apiKey: string,
-  riskTolerance: string,
-  riskIdentification: string,
-  maxLoss: string,
-  language: string = 'zh'
-): Promise<DeepSeekAnalysisResult> => {
-  // 实际项目中应当调用API
-  return {
-    consistencyScore: 8,
-    conflictPoints: [],
-    suggestions: ['考虑增加非系统性风险的识别']
-  };
-};
-
-const analyzeCognitiveBiases = async (
-  apiKey: string,
-  biasesAwareness: string,
-  biasMitigation: string,
-  language: string = 'zh'
-): Promise<DeepSeekAnalysisResult> => {
-  // 实际项目中应当调用API
-  return {
-    consistencyScore: 6,
-    conflictPoints: [],
-    suggestions: ['建立定期检查认知偏差的机制']
-  };
-};

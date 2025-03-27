@@ -22,6 +22,7 @@ export interface InvestmentCheckpointProps {
   onSave: (decision: InvestmentDecision) => Promise<void>;
   onCancel: () => void;
   onDelete?: (id: string) => void;
+  readOnly?: boolean; // 添加只读模式属性
 }
 
 // API 分析函数类型
@@ -30,6 +31,7 @@ export interface APIAnalysisFunctions {
     apiKey: string,
     buyRules: string,
     sellRules: string,
+    stopLossRules: string,
     riskManagement: string,
     language?: string
   ) => Promise<DeepSeekAnalysisResult>;

@@ -6,7 +6,15 @@
       "@/*": ["src/*"]
     },
     "moduleResolution": "node",
-    "allowJs": true
+    "allowJs": true,
+    "target": "es2015",
+    "module": "esnext",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true
   },
   "include": [
     "src/**/*.ts",

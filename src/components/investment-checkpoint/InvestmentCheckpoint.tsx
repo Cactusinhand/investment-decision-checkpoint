@@ -39,6 +39,7 @@ export const InvestmentCheckpoint: React.FC<InvestmentCheckpointProps> = ({
   onSave,
   onCancel,
   onDelete,
+  readOnly = false, // 添加只读模式属性，默认为false
 }) => {
   const [currentStage, setCurrentStage] = useState(1);
   const [localDecision, setLocalDecision] = useState<InvestmentDecision | null>(null);
@@ -54,7 +55,7 @@ export const InvestmentCheckpoint: React.FC<InvestmentCheckpointProps> = ({
   }, [currentDecision]);
 
   const handleInputChange = (questionId: string, value: any) => {
-    if (!localDecision) return;
+    if (!localDecision || readOnly) return; // 在只读模式下不允许修改
 
     setLocalDecision((prev) =>
       prev
@@ -209,11 +210,12 @@ export const InvestmentCheckpoint: React.FC<InvestmentCheckpointProps> = ({
                   <Input
                     type="text"
                     value={localDecision?.name || ''}
-                    onChange={(e) => setLocalDecision({
+                    onChange={(e) => !readOnly && setLocalDecision({
                       ...localDecision,
                       name: e.target.value,
                     })}
-                    className={`w-full dark:bg-gray-700 dark:border-gray-600 ${validatedFields && (!localDecision?.name || localDecision.name.trim() === '') ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/10' : ''}`}
+                    disabled={readOnly}
+                    className={`w-full dark:bg-gray-700 dark:border-gray-600 ${validatedFields && (!localDecision?.name || localDecision.name.trim() === '') ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/10' : ''} ${readOnly ? 'opacity-70 cursor-not-allowed' : ''}`}
                     placeholder={translations[language].enterDecisionName}
                   />
                   {validatedFields && (!localDecision?.name || localDecision.name.trim() === '') && (
@@ -319,40 +321,77 @@ export const InvestmentCheckpoint: React.FC<InvestmentCheckpointProps> = ({
           </div>
         </CardContent>
         <CardFooter className="flex justify-between">
-          <Button
-            onClick={handlePreviousStage}
-            disabled={currentStage === 1}
-            className={cn(
-              'text-gray-900 dark:text-white',
-              currentStage === 1
-                ? 'bg-gray-200 dark:bg-gray-700 cursor-not-allowed'
-                : 'bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500'
-            )}
-          >
-            {translations[language].previous}
-          </Button>
-          {currentStage < 7 ? (
-            <Button
-              onClick={handleNextStage}
-              className="bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-700 dark:hover:bg-blue-800"
-            >
-              {translations[language].next}
-            </Button>
+          {readOnly ? (
+            // 只读模式下显示翻页和返回按钮
+            <>
+              <Button
+                onClick={handlePreviousStage}
+                disabled={currentStage === 1}
+                className={cn(
+                  'text-gray-900 dark:text-white',
+                  currentStage === 1
+                    ? 'bg-gray-200 dark:bg-gray-700 cursor-not-allowed'
+                    : 'bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500'
+                )}
+              >
+                {translations[language].previous}
+              </Button>
+              <div className="flex gap-2">
+                {currentStage < 7 && (
+                  <Button
+                    onClick={handleNextStage}
+                    className="bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-700 dark:hover:bg-blue-800"
+                  >
+                    {translations[language].next}
+                  </Button>
+                )}
+                <Button
+                  onClick={onCancel}
+                  className="bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white"
+                >
+                  {language === 'zh' ? '返回' : 'Back'}
+                </Button>
+              </div>
+            </>
           ) : (
-            <Button
-              onClick={handleCompleteDecision}
-              disabled={isSaving}
-              className="bg-green-500 hover:bg-green-600 text-white dark:bg-green-700 dark:hover:bg-green-800"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {translations[language].saving}
-                </>
+            // 编辑模式下显示正常的导航按钮
+            <>
+              <Button
+                onClick={handlePreviousStage}
+                disabled={currentStage === 1}
+                className={cn(
+                  'text-gray-900 dark:text-white',
+                  currentStage === 1
+                    ? 'bg-gray-200 dark:bg-gray-700 cursor-not-allowed'
+                    : 'bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500'
+                )}
+              >
+                {translations[language].previous}
+              </Button>
+              {currentStage < 7 ? (
+                <Button
+                  onClick={handleNextStage}
+                  className="bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-700 dark:hover:bg-blue-800"
+                >
+                  {translations[language].next}
+                </Button>
               ) : (
-                translations[language].completeDecision
+                <Button
+                  onClick={handleCompleteDecision}
+                  disabled={isSaving}
+                  className="bg-green-500 hover:bg-green-600 text-white dark:bg-green-700 dark:hover:bg-green-800"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {translations[language].saving}
+                    </>
+                  ) : (
+                    translations[language].completeDecision
+                  )}
+                </Button>
               )}
-            </Button>
+            </>
           )}
         </CardFooter>
       </Card>

@@ -43,17 +43,20 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
   });
   
   // 评估结果
-  const [result, setResult] = useState<EvaluationResult | null>(null);
+  const [result, setResult] = useState<EvaluationResult | null>(decision.evaluationResult || null);
   
   // 输入类型错误
   const [typeErrors, setTypeErrors] = useState<string[]>([]);
   
-  // 处理评估过程
+  // 检查决策是否已有评估结果
   useEffect(() => {
-    // 如果已有结果或正在评估，不执行
-    if (result || state.isEvaluating) return;
-    
-    const startEvaluation = async () => {
+    if (decision.evaluated && decision.evaluationResult) {
+      setResult(decision.evaluationResult);
+    }
+  }, [decision]);
+  
+  // 开始评估函数
+  const startEvaluation = async () => {
       try {
         setState({
           isEvaluating: true,
@@ -136,8 +139,7 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
       }
     };
     
-    startEvaluation();
-  }, [decision, language, apiKey]);
+  // 不再自动开始评估，改为手动触发
   
   // 保存评估结果
   const handleSaveResult = () => {
@@ -168,7 +170,7 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
     );
   }
   
-  // 否则显示评估过程
+  // 否则显示评估过程或开始评估按钮
   return (
     <Card className="w-full shadow-lg dark:bg-gray-800 dark:border-gray-700">
       <CardHeader>
@@ -200,8 +202,24 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
           </div>
         )}
         
-        {/* 评估过程 */}
-        <EvaluationProcess state={state} language={language} />
+        {/* 显示评估过程或开始评估按钮 */}
+        {state.isEvaluating ? (
+          <EvaluationProcess state={state} language={language} />
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8">
+            <p className="mb-6 text-center text-gray-600 dark:text-gray-300">
+              {language === 'zh' 
+                ? '点击下方按钮开始评估您的投资决策' 
+                : 'Click the button below to start evaluating your investment decision'}
+            </p>
+            <Button 
+              onClick={startEvaluation}
+              className="px-8 py-2 bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {language === 'zh' ? '开始评估' : 'Start Evaluation'}
+            </Button>
+          </div>
+        )}
       </CardContent>
       
       <CardFooter className="flex justify-end">

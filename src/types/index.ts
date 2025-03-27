@@ -13,6 +13,9 @@ export interface InvestmentDecision {
   answers: Record<string, any>;
   completed: boolean;
   reviewScheduled?: string;
+  evaluated?: boolean;
+  evaluationScore?: number;
+  evaluationResult?: EvaluationResult;
 }
 
 export interface Question {

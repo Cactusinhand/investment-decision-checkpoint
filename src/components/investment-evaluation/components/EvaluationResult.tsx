@@ -116,12 +116,6 @@ const EvaluationResultDisplay: React.FC<EvaluationResultProps> = ({
             </CardTitle>
             <CardDescription className="text-gray-500 dark:text-gray-400">
               {decision.name}
-              {apiAssisted && (
-                <span className="inline-flex items-center ml-2 text-xs font-medium text-blue-600 dark:text-blue-400">
-                  <Cpu className="h-3 w-3 mr-1" />
-                  {language === 'zh' ? 'AI增强分析' : 'AI-enhanced Analysis'}
-                </span>
-              )}
             </CardDescription>
           </div>
           <Badge variant="outline">
@@ -157,7 +151,18 @@ const EvaluationResultDisplay: React.FC<EvaluationResultProps> = ({
         </div>
         
         {/* 评分图表 */}
-        <EvaluationChart result={result} language={language} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <EvaluationChart result={result} language={language} />
+          
+          {/* 雷达图 */}
+          <React.Suspense fallback={<div className="h-64 flex items-center justify-center"><span>加载图表中...</span></div>}>
+            {/* 动态导入雷达图组件以提高性能 */}
+            {(() => {
+              const EvaluationRadarChart = React.lazy(() => import('./EvaluationRadarChart'));
+              return <EvaluationRadarChart result={result} language={language} />;
+            })()}
+          </React.Suspense>
+        </div>
         
         {/* 强项 */}
         {strengths.length > 0 && (
@@ -201,6 +206,29 @@ const EvaluationResultDisplay: React.FC<EvaluationResultProps> = ({
                 <li key={index}>{recommendation}</li>
               ))}
             </ul>
+          </div>
+        </div>
+        
+        {/* DeepSeek AI分析提示 */}
+        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-100 dark:border-blue-800">
+          <h3 className="font-medium text-gray-900 dark:text-white flex items-center gap-1 mb-2">
+            <Cpu size={16} className="text-blue-500" />
+            {language === 'zh' ? 'DeepSeek AI分析' : 'DeepSeek AI Analysis'}
+          </h3>
+          <div className="text-gray-700 dark:text-gray-200 text-sm">
+            {apiAssisted ? (
+              <p>
+                {language === 'zh' 
+                  ? '本评估结果由DeepSeek AI增强分析，包含对投资逻辑一致性、风险评估一致性和认知偏差的深度分析。'
+                  : 'This evaluation is enhanced by DeepSeek AI, including deep analysis of investment logic consistency, risk assessment consistency, and cognitive biases.'}
+              </p>
+            ) : (
+              <p>
+                {language === 'zh'
+                  ? '启用DeepSeek API可获得更深入的投资策略分析，包括逻辑一致性检查、风险评估验证和认知偏差识别。'
+                  : 'Enable DeepSeek API to get more in-depth investment strategy analysis, including logic consistency checks, risk assessment validation, and cognitive bias identification.'}
+              </p>
+            )}
           </div>
         </div>
         

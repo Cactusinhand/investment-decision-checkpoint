@@ -24,6 +24,8 @@ export interface InvestmentEvaluationProps {
   language: 'zh' | 'en';
   onComplete: (result: EvaluationResult) => void;
   onClose: () => void;
+  translations?: any;
+  apiKey?: string;
 }
 
 // 阶段权重配置
@@ -71,11 +73,13 @@ export const STAGE_NAMES: Record<EvaluationStage, Record<'zh' | 'en', string>> =
 
 // 导出所需常量，以修复导入错误
 export { RATING_RANGES, MIN_VALID_ANSWER_LENGTH };
-export { 
-  EvaluationStep, 
-  EvaluationStage, 
+// 重新导出类型
+export { EvaluationStep, EvaluationStage };
+export type { 
   DeepSeekAnalysisResult, 
   EvaluationResult,
+  EvaluationRating,
+  StageScore,
   InvestmentDecision,
   Question
 };

@@ -31,6 +31,8 @@ import { InvestmentEvaluation } from './components/investment-evaluation';
 import { InvestmentDecision, RiskAssessmentResult, UserProfile, Question, EvaluationResult } from './types';
 import { translations } from './constants/index';
 
+const deepSeekApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY || ''; // 或者 process.env.VITE_DEEPSEEK_API_KEY
+
 /**
  * Helper function to simulate saving data (replace with actual API calls)
  * @param data The data to be saved (can be any type).
@@ -84,17 +86,8 @@ const App: React.FC = () => {
   /** The decision currently being evaluated or whose results are being viewed. */
   const [evaluatingDecision, setEvaluatingDecision] = useState<InvestmentDecision | null>(null);
   /** Stores the DeepSeek API key, loaded from environment variables. */
-  const [apiKey, setApiKey] = useState<string>("");
+  const [apiKey, setApiKey] = useState<string>(deepSeekApiKey);
   
-  // 从环境变量加载API密钥
-  useEffect(() => {
-    // 在React中，环境变量需要以REACT_APP_前缀开头
-    const envApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY;
-    if (envApiKey) {
-      setApiKey(envApiKey);
-    }
-  }, []);
-
   // Load decisions from local storage on initial load
   useEffect(() => {
     const savedDecisions = localStorage.getItem('investmentDecisions');

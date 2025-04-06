@@ -2,7 +2,7 @@ import React, { JSX } from 'react';
 import { InvestmentDecision, Question } from '../../types';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
-import { termDefinitions, termTranslations, optionToTranslationKey, reverseTermTranslations } from './constants';
+import { termDefinitions, termTranslations, optionToTranslationKey, reverseTermTranslations, helpExamples } from './constants';
 import { translations } from '../../constants/index';
 
 export const renderTermWithTooltip = (term: string, language: 'en' | 'zh') => {
@@ -323,55 +323,6 @@ export const findTermsInOption = (option: string, translatedOption: string, ques
   return termsInOption;
 };
 
-// 修复帮助文本翻译问题
-export const getTranslatedHelp = (help: string | undefined, language: 'en' | 'zh'): string => {
-  if (!help) return '';
-  
-  // 引入helpExamples对象
-  const { helpExamples } = require('./constants');
-  
-  // 1. 尝试从问题ID获取预定义的帮助文本
-  const questionIdMatch = help.match(/(\d+-\d+)/);
-  const questionId = questionIdMatch ? questionIdMatch[1] : '';
-  
-  // 如果找到了对应的预定义帮助文本，直接返回
-  if (questionId && helpExamples[language] && helpExamples[language][questionId]) {
-    return helpExamples[language][questionId];
-  }
-  
-  // 2. 如果是英文环境但帮助文本是中文，尝试将对应的中文例子替换为英文
-  if (language === 'en' && /[\u4e00-\u9fa5]/.test(help)) {
-    if (help.startsWith('例如：')) {
-      const chineseExample = help.substring(3);
-      
-      // 尝试在所有英文帮助文本中查找匹配的ID
-      for (const id in helpExamples.en) {
-        const example = helpExamples.en[id];
-        if (example) {
-          // 找到了对应的英文帮助文本，返回
-          return example;
-        }
-      }
-      
-      // 如果没找到匹配，至少翻译前缀
-      return `For example: ${chineseExample}`;
-    }
-    
-    // 如果没有前缀，添加英文前缀
-    return `For example: ${help}`;
-  }
-  
-  // 3. 处理已经有前缀的情况
-  if ((language === 'en' && help.startsWith('For example:')) || 
-      (language === 'zh' && help.startsWith('例如：'))) {
-    return help;
-  }
-  
-  // 4. 其他情况，添加适当的语言前缀
-  const prefix = language === 'en' ? 'For example: ' : '例如：';
-  return `${prefix}${help}`;
-};
-
 // 翻译问题文本
 export const getTranslatedQuestion = (question: string, language: 'en' | 'zh'): string => {
   if (language === 'en') {
@@ -383,7 +334,7 @@ export const getTranslatedQuestion = (question: string, language: 'en' | 'zh'): 
   return questionTranslations[question] || question;
 };
 
-// 修改renderQuestion函数添加验证状态参数
+// Modify renderQuestion to directly use helpExamples based on question ID and language
 export const renderQuestion = (
   question: Question,
   decision: InvestmentDecision | null,
@@ -395,10 +346,10 @@ export const renderQuestion = (
   const value = decision.answers[question.id];
   const originalText = question.text;
   const translatedText = getTranslatedQuestion(originalText, language);
-  
-  // 根据当前语言获取帮助文本
-  const helpExample = question.help ? getTranslatedHelp(question.help, language) : '';
-  
+
+  // Directly get help example based on question ID and language
+  const helpExample = helpExamples[language]?.[question.id] || '';
+
   // 检查是否为未回答的必填项
   const isUnanswered = validated && question.required && (
     value === undefined || 
@@ -406,12 +357,12 @@ export const renderQuestion = (
     value === '' || 
     (question.type === 'checkbox' && Array.isArray(value) && value.length === 0)
   );
-  
+
   // 添加未回答必填项的警告样式
   const requiredFieldClass = isUnanswered 
     ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/10' 
     : '';
-  
+
   // 必填标记的样式
   const requiredMarkClass = isUnanswered 
     ? 'text-red-500 font-bold animate-pulse' 
@@ -435,7 +386,8 @@ export const renderQuestion = (
             required={question.required}
             className={`dark:bg-gray-800 dark:text-white border border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-400 ${requiredFieldClass}`}
           />
-          {question.help && (
+          {/* Only render help text if it exists */}
+          {helpExample && (
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {helpExample}
             </p>
@@ -464,7 +416,8 @@ export const renderQuestion = (
             required={question.required}
             className={`min-h-[100px] dark:bg-gray-800 dark:text-white border border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-400 ${requiredFieldClass}`}
           />
-          {question.help && (
+          {/* Only render help text if it exists */}
+          {helpExample && (
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {helpExample}
             </p>
@@ -490,16 +443,63 @@ export const renderQuestion = (
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
             required={question.required}
-            className={`w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 dark:bg-gray-800 dark:text-white ${requiredFieldClass}`}
+            className={`w-full p-2 border rounded-md dark:bg-gray-800 dark:text-white border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-400 ${requiredFieldClass}`}
           >
-            <option value="">{translations[language].selectOption || translations['en'].selectOption}</option>
-            {question.options?.map((option: string) => (
-              <option key={option} value={option}>
+            <option value="" disabled>
+              {translations[language].selectOption}
+            </option>
+            {question.options?.map((option, index) => (
+              <option key={index} value={option}>
                 {getTranslatedOption(option, language)}
               </option>
             ))}
           </select>
-          {question.help && (
+          {/* Only render help text if it exists */}
+          {helpExample && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {helpExample}
+            </p>
+          )}
+          {isUnanswered && (
+            <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+              {translations[language].fieldRequired}
+            </p>
+          )}
+        </div>
+      );
+    case 'radio':
+      return (
+        <div className="mb-4" id={question.id}>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            {renderTextWithTermTooltips(translatedText, question.terms, language)} {question.required && <span className={requiredMarkClass}>*</span>}
+          </label>
+          <div className={`space-y-2 ${isUnanswered ? 'border border-red-300 dark:border-red-600 rounded-md p-2' : ''}`}>
+            {question.options?.map((option, index) => {
+              const translatedOption = getTranslatedOption(option, language);
+              const termsInOption = findTermsInOption(option, translatedOption, question, language);
+              return (
+                <label
+                  key={index}
+                  className="flex items-center space-x-2 cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name={question.id}
+                    value={option}
+                    checked={value === option}
+                    onChange={(e) => onChange(e.target.value)}
+                    required={question.required}
+                    className="form-radio text-blue-600 dark:text-blue-500 dark:bg-gray-800 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {renderTextWithTermTooltips(translatedOption, termsInOption, language)}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          {/* Only render help text if it exists */}
+          {helpExample && (
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {helpExample}
             </p>
@@ -514,44 +514,39 @@ export const renderQuestion = (
     case 'checkbox':
       return (
         <div className="mb-4" id={question.id}>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             {renderTextWithTermTooltips(translatedText, question.terms, language)} {question.required && <span className={requiredMarkClass}>*</span>}
           </label>
-          <div className={`p-2 rounded-md ${isUnanswered ? 'border border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/10' : ''}`}>
-            {question.options?.map((option: string) => {
+          <div className={`space-y-2 ${isUnanswered ? 'border border-red-300 dark:border-red-600 rounded-md p-2' : ''}`}>
+            {question.options?.map((option, index) => {
               const translatedOption = getTranslatedOption(option, language);
-              // 使用新的函数查找术语
               const termsInOption = findTermsInOption(option, translatedOption, question, language);
-
               return (
-                <div key={option} className="flex items-center mb-2">
+                <label
+                  key={index}
+                  className="flex items-center space-x-2 cursor-pointer"
+                >
                   <input
                     type="checkbox"
-                    id={`${question.id}-${option}`}
-                    checked={Array.isArray(value) ? value.includes(option) : false}
+                    value={option}
+                    checked={(value || []).includes(option)}
                     onChange={(e) => {
-                      const newValue = Array.isArray(value)
-                        ? value.includes(option)
-                          ? value.filter((v: string) => v !== option)
-                          : [...value, option]
-                        : [option];
+                      const newValue = e.target.checked
+                        ? [...(value || []), option]
+                        : (value || []).filter((v: string) => v !== option);
                       onChange(newValue);
                     }}
-                    className="mr-2 h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:checked:bg-blue-600"
+                    className="form-checkbox text-blue-600 dark:text-blue-500 dark:bg-gray-800 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
                   />
-                  <label
-                    htmlFor={`${question.id}-${option}`}
-                    className="text-sm font-medium text-gray-900 dark:text-gray-200"
-                  >
-                    {termsInOption.length > 0
-                      ? renderTextWithTermTooltips(translatedOption, termsInOption, language)
-                      : translatedOption}
-                  </label>
-                </div>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {renderTextWithTermTooltips(translatedOption, termsInOption, language)}
+                  </span>
+                </label>
               );
             })}
           </div>
-          {question.help && (
+          {/* Only render help text if it exists */}
+          {helpExample && (
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {helpExample}
             </p>
@@ -563,82 +558,7 @@ export const renderQuestion = (
           )}
         </div>
       );
-    case 'radio':
-      return (
-        <div className="mb-4" id={question.id}>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            {renderTextWithTermTooltips(translatedText, question.terms, language)} {question.required && <span className={requiredMarkClass}>*</span>}
-          </label>
-          <div className={`p-2 rounded-md ${isUnanswered ? 'border border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/10' : ''}`}>
-            {question.options?.map((option: string) => {
-              const translatedOption = getTranslatedOption(option, language);
-              // 使用新的函数查找术语
-              const termsInOption = findTermsInOption(option, translatedOption, question, language);
-
-              return (
-                <div key={option} className="flex items-center mb-2">
-                  <input
-                    type="radio"
-                    id={`${question.id}-${option}`}
-                    name={question.id}
-                    checked={value === option}
-                    onChange={() => onChange(option)}
-                    className="mr-2 h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded-full dark:bg-gray-700 dark:checked:bg-blue-600"
-                  />
-                  <label
-                    htmlFor={`${question.id}-${option}`}
-                    className="text-sm font-medium text-gray-900 dark:text-gray-200"
-                  >
-                    {termsInOption.length > 0
-                      ? renderTextWithTermTooltips(translatedOption, termsInOption, language)
-                      : translatedOption}
-                  </label>
-                </div>
-              );
-            })}
-          </div>
-          {question.help && (
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {helpExample}
-            </p>
-          )}
-          {isUnanswered && (
-            <p className="mt-1 text-xs text-red-500 dark:text-red-400">
-              {translations[language].pleaseSelectOneOption}
-            </p>
-          )}
-        </div>
-      );
-    case 'date':
-      return (
-        <div className="mb-4" id={question.id}>
-          <label
-            htmlFor={question.id}
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-          >
-            {renderTextWithTermTooltips(translatedText, question.terms, language)} {question.required && <span className={requiredMarkClass}>*</span>}
-          </label>
-          <Input
-            type="date"
-            id={question.id}
-            value={value || ''}
-            onChange={(e) => onChange(e.target.value)}
-            required={question.required}
-            className={`dark:bg-gray-800 dark:text-white border border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-400 ${requiredFieldClass}`}
-          />
-          {question.help && (
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {helpExample}
-            </p>
-          )}
-          {isUnanswered && (
-            <p className="mt-1 text-xs text-red-500 dark:text-red-400">
-              {translations[language].fieldRequired}
-            </p>
-          )}
-        </div>
-      );
     default:
-      return <p className="text-gray-900 dark:text-white">Question type not supported: {question.type}</p>;
+      return null;
   }
 };

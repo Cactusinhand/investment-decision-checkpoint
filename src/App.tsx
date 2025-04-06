@@ -60,7 +60,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
-  const [language, setLanguage] = useState<'en' | 'zh'>('en'); // 'en' for English, 'zh' for Chinese
+  const [language, setLanguage] = useState<'en' | 'zh'>('zh'); // Set default to Chinese
   const [translatedQuestions, setTranslatedQuestions] = useState<{ [key: number]: Question[] }>(rawQuestions);
   const [isLoggedIn, setIsLoggedIn] = useState(true); // Simulate logged-in state
   // 添加风险评估的开关状态

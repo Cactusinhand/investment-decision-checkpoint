@@ -8,7 +8,6 @@ export const rawQuestions: { [key: number]: Question[] } = {
       text: 'What are your primary investment goals?',
       type: 'textarea',
       required: true,
-      help: '例如：财富保值 / 年化 8% 收益 / 特定项目资金积累',
       terms: ['investment goals']
     },
     {
@@ -32,7 +31,6 @@ export const rawQuestions: { [key: number]: Question[] } = {
       text: 'What are your liquidity needs for this investment?',
       type: 'textarea',
       required: true,
-      help: '例如：需随时变现 20% 仓位 / 长期锁定无短期需求',
       terms: ['liquidity needs']
     },
   ],
@@ -50,15 +48,12 @@ export const rawQuestions: { [key: number]: Question[] } = {
       text: 'Why do you believe this method is suitable for your goals?',
       type: 'textarea',
       required: true,
-      help: '例如：量化分析可规避主观偏差, 匹配中长期收益目标'
     },
     {
       id: '2-3',
       text: 'What are the key metrics you will use to evaluate potential investments?',
       type: 'textarea',
       required: true,
-      help: '例如：PE/PB/ROE (基本面); MACD/RSI (技术面); 波动率/夏普比率 (量化)'
-      // terms: ['PE', 'PB', 'ROE', 'MACD', 'RSI', 'volatility', 'Sharpe ratio']
     },
   ],
   3: [
@@ -67,30 +62,24 @@ export const rawQuestions: { [key: number]: Question[] } = {
       text: 'What specific criteria will trigger a buy decision?',
       type: 'textarea',
       required: true,
-      help: '例如：股价突破 200 日均线 +RSI<30'
-      // terms: ['RSI']
     },
     {
       id: '3-2',
       text: 'What specific criteria will trigger a sell decision (profit taking)?',
       type: 'textarea',
       required: true,
-      help: '例如：达到目标价(如 PE> 行业均值 20%)'
-      // terms: ['PE']
     },
     {
       id: '3-3',
       text: 'What specific criteria will trigger a sell decision (loss mitigation)?',
       type: 'textarea',
       required: true,
-      help: '例如：跌破支撑位(如-15% 成本价) / 业务指标恶化'
     },
     {
       id: '3-4',
       text: 'How will you manage position sizing?',
       type: 'textarea',
       required: true,
-      help: '例如：单笔投资 ≤ 总资金 5%, 动态再平衡每季度',
       terms: ['position sizing']
     },
   ],
@@ -100,15 +89,12 @@ export const rawQuestions: { [key: number]: Question[] } = {
       text: 'What are the major risks associated with this investment?',
       type: 'textarea',
       required: true,
-      help: '例如：政策监管变化 / 行业周期下行 / 流动性枯竭'
     },
     {
       id: '4-2',
       text: 'How will you monitor these risks?',
       type: 'textarea',
       required: true,
-      help: '例如：月度跟踪行业政策 / 设置波动率预警阈值'
-      // terms: ['volatility']
     },
     {
       id: '4-3',
@@ -123,7 +109,6 @@ export const rawQuestions: { [key: number]: Question[] } = {
       text: 'What is the maximum potential loss you are willing to accept?',
       type: 'text',
       required: true,
-      help: '例如：总本金 10% / 单笔投资 30%'
     },
   ],
   5: [
@@ -139,14 +124,12 @@ export const rawQuestions: { [key: number]: Question[] } = {
       text: 'How will you verify the accuracy of this information?',
       type: 'textarea',
       required: true,
-      help: '例如：交叉比对多源数据 / 关注审计意见 / 验证历史预测准确性'
     },
     {
       id: '5-3',
       text: 'What are the key assumptions underlying your investment thesis?',
       type: 'textarea',
       required: true,
-      help: '例如：行业年增长率保持 5% 以上 或 货币政策维持宽松'
     },
   ],
   6: [
@@ -156,7 +139,6 @@ export const rawQuestions: { [key: number]: Question[] } = {
       type: 'radio',
       options: ['Yes', 'No'],
       required: true
-      // terms: ['anchoring bias']
     },
     {
       id: '6-2',
@@ -192,8 +174,6 @@ export const rawQuestions: { [key: number]: Question[] } = {
       text: 'What measures will you take to address identified biases?',
       type: 'textarea',
       required: true,
-      help: '例如：设定机械止损规则 / 引入反向观点压力测试 / 强制记录风险收益比'
-      // terms: ['stop-loss orders']
     },
   ],
   7: [
@@ -202,14 +182,12 @@ export const rawQuestions: { [key: number]: Question[] } = {
       text: 'Summarize your investment decision and rationale',
       type: 'textarea',
       required: true,
-      help: '例如；基于行业复苏预期, 通过定量筛选低估值高分红标的, 目标持有 2 年'
     },
     {
       id: '7-2',
       text: 'What potential factors could change your investment thesis?',
       type: 'textarea',
       required: true,
-      help: '例如: 美联储加息超预期 / 公司管理层变动 / 技术替代出现'
     },
     {
       id: '7-3',
@@ -223,7 +201,6 @@ export const rawQuestions: { [key: number]: Question[] } = {
       text: 'Who else will review this decision (if applicable)?',
       type: 'text',
       required: false,
-      help: '例如：投资委员会 / 独立风控官 / 财务顾问'
     },
   ],
 };
@@ -279,10 +256,10 @@ export const questionTranslations = {
 export const helpExamples = {
   en: {
     '1-1': 'For example: Wealth preservation/8% annual return/Fund accumulation for specific projects',
-    '1-2': 'For example: Short-term (<1 year)/Medium-term (1-5 years)/Long-term (>5 years)',
-    '1-3': 'For example: I can accept up to 15% temporary decrease in my investment value',
-    '1-4': 'For example: I need 20% of the investment to be accessible within 30 days',
-    '2-1': 'For example: Fundamental analysis/Technical analysis/Quantitative analysis',
+    // '1-2': 'For example: Short-term (<1 year)/Medium-term (1-5 years)/Long-term (>5 years)',
+    // '1-3': 'For example: I can accept up to 15% temporary decrease in my investment value',
+    '1-4': 'For example: 20% of the position needs to be liquidated at any time/locked in for the long term with no short-term demand',
+    // '2-1': 'For example: Fundamental analysis/Technical analysis/Quantitative analysis',
     '2-2': 'For example: This method has historical data supporting its effectiveness for my time horizon',
     '2-3': 'For example: PE ratio below 15, ROE above 15%, stable revenue growth',
     '3-1': 'For example: PE ratio below industry average, positive free cash flow, growing revenue',
@@ -291,51 +268,51 @@ export const helpExamples = {
     '3-4': 'For example: Maximum 5% of portfolio in a single position, sizing based on volatility',
     '4-1': 'For example: Business model disruption, regulatory changes, economic recession',
     '4-2': 'For example: Regular review of financial statements, industry news, economic indicators',
-    '4-3': 'For example: Diversification across sectors, stop-loss orders, hedging with options',
+    // '4-3': 'For example: Diversification across sectors, stop-loss orders, hedging with options',
     '4-4': 'For example: 20% of the invested capital',
-    '5-1': 'For example: Company filings, industry reports, expert interviews, economic data',
+    // '5-1': 'For example: Company filings, industry reports, expert interviews, economic data',
     '5-2': 'For example: Cross-reference multiple sources, verify data directly when possible',
     '5-3': 'For example: The company will maintain its market share, the industry will grow at 5% annually',
-    '6-1': 'For example: I am constantly comparing current price to my purchase price',
-    '6-2': 'For example: I believe I can predict near-term price movements accurately',
-    '6-3': 'For example: I am investing because everyone is talking about this opportunity',
-    '6-4': 'For example: I focus mostly on potential gains and give less weight to possible losses',
-    '6-5': 'For example: I have actively sought out and considered bearish analysis',
+    // '6-1': 'For example: I am constantly comparing current price to my purchase price',
+    // '6-2': 'For example: I believe I can predict near-term price movements accurately',
+    // '6-3': 'For example: I am investing because everyone is talking about this opportunity',
+    // '6-4': 'For example: I focus mostly on potential gains and give less weight to possible losses',
+    // '6-5': 'For example: I have actively sought out and considered bearish analysis',
     '6-6': 'For example: Setting strict rules before investing, getting second opinions',
     '7-1': 'For example: I am investing in Company X because of its strong competitive position...',
     '7-2': 'For example: Major regulatory changes, loss of key competitive advantage, better alternatives',
-    '7-3': 'For example: Quarterly for the first year, then semi-annually',
+    // '7-3': 'For example: Quarterly for the first year, then semi-annually',
     '7-4': 'For example: Investment committee, financial advisor, trusted colleague'
   },
   zh: {
-    '1-1': '例如：财富保值/年化8%收益/特定项目资金积累',
-    '1-2': '例如：短期（<1年）/中期（1-5年）/长期（>5年）',
-    '1-3': '例如: 我可以接受投资价值最多15%的暂时下降',
-    '1-4': '例如: 我需要在30天内能够获取20%的投资',
-    '2-1': '例如：基本面分析/技术分析/量化分析',
-    '2-2': '例如：这种方法有历史数据支持其在我的投资期限内的有效性',
-    '2-3': '例如: 市盈率低于15，净资产收益率高于15%，稳定的收入增长',
-    '3-1': '例如：市盈率低于行业平均水平，自由现金流为正，收入增长',
-    '3-2': '例如：达到目标价格，基本面恶化，其他地方有更好的机会',
-    '3-3': '例如: 从购买价格损失15%，突破关键支撑位，业务指标恶化',
-    '3-4': '例如: 单一头寸最多占投资组合的5%，基于波动性调整仓位',
-    '4-1': '例如: 商业模式disruption，监管变化，经济衰退',
-    '4-2': '例如：定期审查财务报表，行业新闻，经济指标',
-    '4-3': '例如：跨行业多元化，止损单，期权对冲',
-    '4-4': '例如: 投资资本的20%',
-    '5-1': '例如：公司文件，行业报告，专家访谈，经济数据',
-    '5-2': '例如：交叉引用多个来源，尽可能直接验证数据',
-    '5-3': '例如: 该公司将保持其市场份额，该行业将以每年5%的速度增长',
-    '6-1': '例如：我不断将当前价格与我的购买价格进行比较',
-    '6-2': '例如：我相信我可以准确预测近期价格走势',
-    '6-3': '例如：我投资是因为每个人都在谈论这个机会',
-    '6-4': '例如：我主要关注潜在收益，较少考虑可能的损失',
-    '6-5': '例如：我已积极寻求并考虑了看跌分析',
-    '6-6': '例如：在投资前设定严格规则，获取第二意见',
-    '7-1': '例如: 我投资于X公司是因为其强大的竞争地位...',
-    '7-2': '例如：重大监管变化，失去关键竞争优势，有更好的替代方案',
-    '7-3': '例如：第一年每季度，然后每半年',
-    '7-4': '例如：投资委员会，财务顾问，值得信任的同事'
+    '1-1': '例如： 财富保值/年化8%收益/特定项目资金积累',
+    // '1-2': '例如： 短期（<1年）/中期（1-5年）/长期（>5年）',
+    // '1-3': '例如： 我可以接受投资价值最多15%的暂时下降',
+    '1-4': '例如： 需随时变现 20% 仓位 / 长期锁定无短期需求',
+    // '2-1': '例如： 基本面分析/技术分析/量化分析',
+    '2-2': '例如： 这种方法有历史数据支持其在我的投资期限内的有效性',
+    '2-3': '例如： 市盈率低于15，净资产收益率高于15%，稳定的收入增长',
+    '3-1': '例如： 市盈率低于行业平均水平，自由现金流为正，收入增长',
+    '3-2': '例如： 达到目标价格，基本面恶化，其他地方有更好的机会',
+    '3-3': '例如： 从购买价格损失15%，突破关键支撑位，业务指标恶化',
+    '3-4': '例如： 单一头寸最多占投资组合的5%，基于波动性调整仓位',
+    '4-1': '例如： 商业模式颠覆，监管变化，经济衰退',
+    '4-2': '例如： 定期审查财务报表，行业新闻，经济指标',
+    // '4-3': '例如： 跨行业多元化，止损单，期权对冲',
+    '4-4': '例如： 投资资本的20%',
+    // '5-1': '例如： 公司文件，行业报告，专家访谈，经济数据',
+    '5-2': '例如： 交叉引用多个来源，尽可能直接验证数据',
+    '5-3': '例如： 该公司将保持其市场份额，该行业将以每年5%的速度增长',
+    // '6-1': '例如： 我不断将当前价格与我的购买价格进行比较',
+    // '6-2': '例如： 我相信我可以准确预测近期价格走势',
+    // '6-3': '例如： 我投资是因为每个人都在谈论这个机会',
+    // '6-4': '例如： 我主要关注潜在收益，较少考虑可能的损失',
+    // '6-5': '例如： 我已积极寻求并考虑了看跌分析',
+    '6-6': '例如： 在投资前设定严格规则，获取第二意见',
+    '7-1': '例如： 我投资于X公司是因为其强大的竞争地位...',
+    '7-2': '例如： 重大监管变化，失去关键竞争优势，有更好的替代方案',
+    // '7-3': '例如： 第一年每季度，然后每半年',
+    '7-4': '例如： 投资委员会，财务顾问，值得信任的同事'
   }
 };
 

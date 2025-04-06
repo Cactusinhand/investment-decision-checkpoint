@@ -1,3 +1,5 @@
+import { RiskProfileType } from '../../types'; // Import global type
+
 export interface Question {
   id: string;
   textZh: string;
@@ -35,15 +37,16 @@ export interface RiskAssessmentProps {
   onComplete: (result: RiskAssessmentResult) => void;
 }
 
-// 重写RiskAssessmentResult类型，保持与../types/index.ts中的兼容
+// 重写RiskAssessmentResult类型，使其与全局定义完全一致
 export interface RiskAssessmentResult {
   name: string;
   score: number;
   description: string;
   recommendation: string;
-  type?: string;
-  needsVerification?: boolean;
-  needsWarning?: boolean;
+  type: RiskProfileType; // 使用全局的 RiskProfileType，且为必需
+  // 移除可选属性
+  // needsVerification?: boolean;
+  // needsWarning?: boolean;
 }
 
 // 不需要从全局导入

@@ -8,7 +8,7 @@ import {
   CardFooter 
 } from '../../ui/card';
 import { Button } from '../../ui/button';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { 
   InvestmentDecision, 
   InvestmentEvaluationProps,
@@ -26,38 +26,71 @@ import EvaluationProcess from './EvaluationProcess';
 import EvaluationResultDisplay from './EvaluationResult';
 import { rawQuestions } from '../../investment-checkpoint/constants';
 
+/**
+ * InvestmentEvaluation Component
+ * 
+ * This component orchestrates the evaluation process for a given investment decision.
+ * It handles:
+ * - Displaying the evaluation progress.
+ * - Triggering input validation and type validation.
+ * - Performing synchronous rule-based scoring.
+ * - Optionally performing asynchronous API-enhanced analysis (if apiKey is provided).
+ * - Displaying validation errors.
+ * - Displaying the final evaluation result.
+ * - Handling user interactions like starting evaluation, saving results, and closing.
+ */
 const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
+  /** The investment decision object to be evaluated. */
   decision,
+  /** The current application language ('en' or 'zh'). */
   language,
+  /** Callback function triggered when the evaluation is complete and the user confirms saving. */
   onComplete,
+  /** Callback function to close the evaluation modal/view. */
   onClose,
+  /** The translations object for UI text. */
   translations,
+  /** Optional DeepSeek API key for enhanced analysis. */
   apiKey
 }) => {
-  // 评估状态
+  /** State representing the current phase and progress of the evaluation process. */
   const [state, setState] = useState<EvaluationState>({
     isEvaluating: false,
-    currentStep: EvaluationStep.VALIDATING,
+    currentStep: EvaluationStep.VALIDATING, // Start at validation step
     progress: 0,
     error: null
   });
   
-  // 评估结果
+  /** Loading state specifically for the asynchronous API analysis part. */
+  const [isLoadingAPI, setIsLoadingAPI] = useState(false);
+  
+  /** Stores the final evaluation result object. Initialized if the decision already has results. */
   const [result, setResult] = useState<EvaluationResult | null>(decision.evaluationResult || null);
   
-  // 输入类型错误
+  /** Stores an array of field IDs that failed type validation. */
   const [typeErrors, setTypeErrors] = useState<string[]>([]);
   
-  // 检查决策是否已有评估结果
+  /** Effect to initialize the result state if the decision passed in already has evaluation results. */
   useEffect(() => {
     if (decision.evaluated && decision.evaluationResult) {
       setResult(decision.evaluationResult);
+      // If results exist, set state to Complete to show results immediately
+       setState({
+        isEvaluating: false,
+        currentStep: EvaluationStep.COMPLETE,
+        progress: 100,
+        error: null
+      });
     }
   }, [decision]);
   
-  // 开始评估函数
+  /** 
+   * Asynchronously starts the multi-step evaluation process.
+   * Handles validation, basic scoring, optional API analysis, and state updates.
+   */
   const startEvaluation = async () => {
       try {
+        setIsLoadingAPI(false); // Reset API loading state
         setState({
           isEvaluating: true,
           currentStep: EvaluationStep.VALIDATING,
@@ -100,8 +133,9 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
             progress: 60
           }));
           
-          // 执行异步API增强评估
+          setIsLoadingAPI(true); // Set API loading state to true
           const enhancedResult = await evaluateInvestmentDecision(decision, apiKey, language);
+          setIsLoadingAPI(false); // Set API loading state to false after call completes
           
           setState(prev => ({
             ...prev,
@@ -130,6 +164,7 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
           progress: 100
         }));
       } catch (error) {
+        setIsLoadingAPI(false); // Ensure loading state is false on error
         console.error('评估过程出错:', error);
         setState(prev => ({
           ...prev,
@@ -139,9 +174,11 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
       }
     };
     
-  // 不再自动开始评估，改为手动触发
-  
-  // 保存评估结果
+  /** 
+   * Handler function called when the user confirms saving the evaluation results.
+   * Currently, it just calls the onComplete callback passed via props.
+   * In a real app, this might involve saving the result back to a central store or backend.
+   */
   const handleSaveResult = () => {
     if (!result) return;
     
@@ -157,8 +194,8 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
     onComplete(result);
   };
   
-  // 如果已有结果，显示结果页面
-  if (result) {
+  // If evaluation is complete (either just finished or loaded existing results), show the results display.
+  if (state.currentStep === EvaluationStep.COMPLETE && result) {
     return (
       <EvaluationResultDisplay
         decision={decision}
@@ -166,11 +203,12 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
         language={language}
         onClose={onClose}
         onSave={handleSaveResult}
+        translations={translations}
       />
     );
   }
   
-  // 否则显示评估过程或开始评估按钮
+  // Otherwise, show the evaluation process view (progress bar or start button).
   return (
     <Card className="w-full shadow-lg dark:bg-gray-800 dark:border-gray-700">
       <CardHeader>
@@ -203,8 +241,8 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
         )}
         
         {/* 显示评估过程或开始评估按钮 */}
-        {state.isEvaluating ? (
-          <EvaluationProcess state={state} language={language} />
+        {state.isEvaluating || isLoadingAPI ? (
+          <EvaluationProcess state={state} language={language} isLoadingAPI={isLoadingAPI} />
         ) : (
           <div className="flex flex-col items-center justify-center py-8">
             <p className="mb-6 text-center text-gray-600 dark:text-gray-300">
@@ -214,9 +252,14 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
             </p>
             <Button 
               onClick={startEvaluation}
+              disabled={isLoadingAPI || state.isEvaluating}
               className="px-8 py-2 bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {language === 'zh' ? '开始评估' : 'Start Evaluation'}
+              {isLoadingAPI ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {language === 'zh' ? 'API分析中...' : 'Analyzing with API...'}</>
+              ) : (
+                language === 'zh' ? '开始评估' : 'Start Evaluation'
+              )}
             </Button>
           </div>
         )}
@@ -225,7 +268,7 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
       <CardFooter className="flex justify-end">
         <Button
           onClick={onClose}
-          disabled={state.isEvaluating}
+          disabled={state.isEvaluating || isLoadingAPI}
         >
           {language === 'zh' ? '取消' : 'Cancel'}
         </Button>

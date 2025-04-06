@@ -5,31 +5,69 @@ import { riskAssessmentQuestions } from './RiskAssessmentQuestions';
 import { RiskAssessmentAnswers, RiskAssessmentResult, Question } from './types';
 import { calculateRiskScore, checkRequiredAnswers } from './utils';
 
+/**
+ * Props for the RiskAssessment component.
+ */
 interface RiskAssessmentProps {
+  /** Controls whether the assessment modal is visible. */
   isOpen: boolean;
+  /** Callback function to close the assessment modal. */
   onClose: () => void;
+  /** Current application language ('en' or 'zh'). */
   language: 'zh' | 'en';
+  /** Optional callback function triggered when the assessment is successfully completed and submitted. Passes the result object. */
   onComplete?: (result: RiskAssessmentResult) => void;
 }
 
+/**
+ * RiskAssessment Component
+ * 
+ * A modal component that presents a series of questions to assess the user's
+ * risk tolerance. It calculates a score, determines a risk profile, and provides
+ * recommendations based on the answers.
+ * Handles:
+ * - Displaying questions categorized by topic.
+ * - Storing user answers.
+ * - Validating required questions before submission.
+ * - Calculating the risk score and profile.
+ * - Displaying the assessment results, including potential warnings or verification prompts.
+ * - Calling `onComplete` callback with the result.
+ * - Closing the modal.
+ */
 const RiskAssessment: React.FC<RiskAssessmentProps> = ({
   isOpen,
   onClose,
   language,
   onComplete
 }) => {
+  /** State to store the user's answers to the assessment questions. Key is questionId. */
   const [answers, setAnswers] = useState<RiskAssessmentAnswers>({});
+  /** State to store the calculated assessment result object after submission. */
   const [result, setResult] = useState<RiskAssessmentResult | null>(null);
+  /** State to store any validation error messages (e.g., unanswered required questions). */
   const [error, setError] = useState<string | null>(null);
 
-  // 处理答案变化
+  /**
+   * Handles changes to an answer for a specific question.
+   * Updates the `answers` state.
+   * @param questionId - The ID of the question being answered.
+   * @param value - The new answer value.
+   */
   const handleAnswerChange = (questionId: string, value: any) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }));
+    // Clear error when user starts answering again
+    if (error) setError(null);
   };
 
-  // 提交评估
+  /** 
+   * Handles the submission of the assessment.
+   * Validates required answers, calculates the result, updates state, and calls `onComplete`.
+   */
   const submitAssessment = () => {
-    // 检查是否所有必填问题都已回答
+    // Clear previous error
+    setError(null);
+    
+    // Check if all required questions are answered
     const unansweredQuestions = checkRequiredAnswers(answers);
 
     if (unansweredQuestions.length > 0) {
@@ -45,14 +83,22 @@ const RiskAssessment: React.FC<RiskAssessmentProps> = ({
     }
   };
 
-  // 关闭评估
+  /** 
+   * Handles closing the assessment modal.
+   * Resets local state (answers, result, error) and calls the `onClose` prop.
+   */
   const closeAssessment = () => {
     setAnswers({});
     setResult(null);
+    setError(null); // Also clear error on close
     onClose();
   };
 
-  // 渲染问题
+  /**
+   * Renders a single assessment question based on its type (radio, checkbox).
+   * @param question - The question object to render.
+   * @returns JSX element for the question.
+   */
   const renderQuestion = (question: Question) => {
     const value = answers[question.id] || '';
     const questionText = language === 'zh' ? question.textZh : question.textEn;
@@ -123,7 +169,12 @@ const RiskAssessment: React.FC<RiskAssessmentProps> = ({
     }
   };
 
-  // 渲染评估结果
+  /**
+   * Renders the assessment result section after submission.
+   * Displays the score, risk profile name, description, recommendations,
+   * and any relevant warnings or verification prompts.
+   * @returns JSX element for the result display, or null if no result.
+   */
   const renderResult = () => {
     if (!result) return null;
 

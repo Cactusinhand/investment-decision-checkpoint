@@ -3,370 +3,396 @@ import { DeepSeekAnalysisResult } from '../../../types';
 import { API_TIMEOUT, API_RETRY_COUNT } from '../constants';
 import { fallbackLogicAnalysis, fallbackRiskAnalysis, fallbackBiasAnalysis } from '../utils/apiUtils';
 
-// 创建OpenAI客户端
-const createClient = (apiKey: string) => {
+/**
+ * @fileoverview Functions for interacting with the DeepSeek API to enhance investment decision evaluation.
+ * Provides analysis for logic consistency, risk consistency, and cognitive biases.
+ * Includes retry logic and fallbacks to local analysis if API calls fail.
+ */
+
+/**
+ * Creates an OpenAI client instance configured for the DeepSeek API.
+ * @param apiKey - The user's DeepSeek API key.
+ * @returns An configured OpenAI client instance.
+ */
+const createClient = (apiKey: string): OpenAI => {
   return new OpenAI({
     baseURL: 'https://api.deepseek.com',
     apiKey,
     timeout: API_TIMEOUT,
-    dangerouslyAllowBrowser: true, // 允许在浏览器环境中使用OpenAI客户端
+    dangerouslyAllowBrowser: true, // Necessary for client-side usage
   });
 };
 
-// 分析投资逻辑一致性
+/**
+ * Analyzes the logical consistency between buy, sell, stop-loss rules, and risk management strategies.
+ * Uses the DeepSeek API with retry logic and falls back to local analysis on failure.
+ *
+ * @param args - Arguments for logic consistency analysis.
+ * @param args.buyRules - The user's defined buy rules.
+ * @param args.sellProfitRules - The user's defined rules for taking profit.
+ * @param args.sellLossRules - The user's defined rules for cutting losses (stop-loss).
+ * @param args.riskMgmtSummary - A summary of the user's risk management plan.
+ * @param apiKey - The DeepSeek API key.
+ * @param language - The language for the API prompt ('zh' or 'en').
+ * @returns A promise resolving to the analysis result.
+ */
 export const analyzeLogicConsistency = async (
+  args: { buyRules: string; sellProfitRules: string; sellLossRules: string; riskMgmtSummary: string },
   apiKey: string,
-  buyRules: string,
-  sellRules: string,
-  stopLossRules: string,
-  riskManagement: string,
   language: 'zh' | 'en' = 'zh'
 ): Promise<DeepSeekAnalysisResult> => {
-  console.log(`[${new Date().toISOString()}] 开始调用analyzeLogicConsistency API`);
-  console.log(`API参数: apiKey=${apiKey ? '已提供' : '未提供'}, language=${language}`);
-  console.log(`买入规则: ${buyRules.substring(0, 50)}${buyRules.length > 50 ? '...' : ''}`);
-  console.log(`卖出规则: ${sellRules.substring(0, 50)}${sellRules.length > 50 ? '...' : ''}`);
-  console.log(`止损规则: ${stopLossRules.substring(0, 50)}${stopLossRules.length > 50 ? '...' : ''}`);
-  console.log(`风险管理: ${riskManagement.substring(0, 50)}${riskManagement.length > 50 ? '...' : ''}`);
-  
+  // Destructure args at the beginning for clarity and easier use in fallbacks
+  const { buyRules, sellProfitRules, sellLossRules, riskMgmtSummary } = args;
+  console.log(`[${new Date().toISOString()}] Calling analyzeLogicConsistency API`);
+  console.log(`API Params: apiKey=${apiKey ? 'Provided' : 'Not Provided'}, language=${language}`);
+  console.log(`Buy Rules: ${buyRules.substring(0, 50)}${buyRules.length > 50 ? '...' : ''}`);
+  console.log(`Sell Profit Rules: ${sellProfitRules.substring(0, 50)}${sellProfitRules.length > 50 ? '...' : ''}`);
+  console.log(`Stop Loss Rules: ${sellLossRules.substring(0, 50)}${sellLossRules.length > 50 ? '...' : ''}`);
+  console.log(`Risk Management: ${riskMgmtSummary.substring(0, 50)}${riskMgmtSummary.length > 50 ? '...' : ''}`);
+
   const client = createClient(apiKey);
   let retries = 0;
-  
-  // 系统提示
-  const systemPrompt = language === 'zh' 
-    ? `你是一位投资专家，评估投资决策的逻辑自洽性。你需要分析买入规则、卖出规则、止损规则与风险管理措施之间是否存在矛盾或不一致。请仅返回JSON格式的评估结果。`
-    : `You are an investment expert evaluating the logical consistency of investment decisions. You need to analyze buy rules, sell rules, stop-loss rules, and risk management measures for contradictions or inconsistencies. Return evaluation results in JSON format only.`;
-  
-  // 用户提示
+
+  const systemPrompt = language === 'zh'
+    ? `你是一位投资策略分析师。评估投资决策的买入、卖出（止盈）、止损规则与风险管理策略之间的逻辑一致性。请仅返回JSON格式。`
+    : `You are an investment strategy analyst. Evaluate the logical consistency between buy rules, sell (profit-taking) rules, stop-loss rules, and the risk management strategy. Return results in JSON format only.`;
+
   const userPrompt = language === 'zh'
-    ? `请评估以下投资策略的逻辑自洽性：
+    ? `评估以下策略的逻辑一致性：
       买入规则：${buyRules}
-      卖出规则：${sellRules}
-      止损规则：${stopLossRules}
-      风险管理：${riskManagement}
-      
-      请返回包含以下字段的JSON：
-      1. consistencyScore: 逻辑自洽性评分(0-10)
-      2. conflictPoints: 潜在矛盾点数组
-      3. suggestions: 改进建议数组
-      4. reasoningPath: 你的分析推理过程`
-    : `Please evaluate the logical consistency of the following investment strategy:
+      止盈规则：${sellProfitRules}
+      止损规则：${sellLossRules}
+      风险管理摘要：${riskMgmtSummary}
+
+      返回JSON对象，包含字段：consistencyScore (0-10 分数), conflictPoints (string[] 矛盾点), suggestions (string[] 建议), reasoningPath (string 分析过程)`
+    : `Evaluate the logical consistency of the following strategy:
       Buy rules: ${buyRules}
-      Sell rules: ${sellRules}
-      Stop-loss rules: ${stopLossRules}
-      Risk management: ${riskManagement}
-      
-      Return a JSON with the following fields:
-      1. consistencyScore: Logical consistency score (0-10)
-      2. conflictPoints: Array of potential conflict points
-      3. suggestions: Array of improvement suggestions
-      4. reasoningPath: Your analytical reasoning process`;
-  
-  console.log(`[${new Date().toISOString()}] 准备发送API请求，系统提示长度: ${systemPrompt.length}, 用户提示长度: ${userPrompt.length}`);
+      Profit-taking rules: ${sellProfitRules}
+      Stop-loss rules: ${sellLossRules}
+      Risk management summary: ${riskMgmtSummary}
+
+      Return a JSON object with fields: consistencyScore (0-10 score), conflictPoints (string[] conflicts), suggestions (string[] suggestions), reasoningPath (string analysis process)`;
+
+  console.log(`[${new Date().toISOString()}] Sending API request. System prompt length: ${systemPrompt.length}, User prompt length: ${userPrompt.length}`);
 
   while (retries <= API_RETRY_COUNT) {
     try {
-      console.log(`[${new Date().toISOString()}] 发送analyzeLogicConsistency API请求 (尝试 ${retries+1}/${API_RETRY_COUNT+1})`);
-      console.log(`请求模型: deepseek-chat`);
-      
+      console.log(`[${new Date().toISOString()}] Sending analyzeLogicConsistency request (Attempt ${retries + 1}/${API_RETRY_COUNT + 1})`);
+      console.log(`Model: deepseek-chat`);
+
       const completion = await client.chat.completions.create({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        model: "deepseek-chat"
+        model: "deepseek-chat",
+        response_format: { type: "json_object" } // Request JSON output
       });
-      
-      // 解析结果
+
       const content = completion.choices[0].message.content;
-      console.log(`[${new Date().toISOString()}] analyzeLogicConsistency API请求成功!`);
-      console.log('API返回完整结果:', completion);
-      console.log('API返回内容:', content);
-      
+      console.log(`[${new Date().toISOString()}] analyzeLogicConsistency request successful!`);
+      console.log('API Raw Response:', completion);
+      console.log('API Content:', content);
+
+      if (!content) {
+         throw new Error('API returned empty content.');
+      }
+
       try {
-        // 检测并移除Markdown代码块标记
-        let jsonContent = content;
-        // 移除开头的```json或```等标记
-        if (jsonContent.startsWith('```')) {
-          const firstLineEnd = jsonContent.indexOf('\n');
-          if (firstLineEnd !== -1) {
-            jsonContent = jsonContent.substring(firstLineEnd + 1);
-          }
+        // JSON mode should return valid JSON directly
+        const parsedResult = JSON.parse(content);
+        console.log(`[${new Date().toISOString()}] Successfully parsed JSON result:`, parsedResult);
+        // Basic validation of expected fields
+        if (typeof parsedResult.consistencyScore !== 'number' || !Array.isArray(parsedResult.conflictPoints) || !Array.isArray(parsedResult.suggestions)) {
+            console.warn("API response missing expected fields, using fallback structure.");
+            // Use destructured args for fallback call
+            return fallbackLogicAnalysis(buyRules, sellProfitRules, sellLossRules, riskMgmtSummary, language);
         }
-        // 移除结尾的```标记
-        if (jsonContent.endsWith('```')) {
-          jsonContent = jsonContent.substring(0, jsonContent.lastIndexOf('```'));
-        }
-        // 移除结尾的可能存在的换行符
-        jsonContent = jsonContent.trim();
-        
-        console.log(`[${new Date().toISOString()}] 处理后的JSON内容:`, jsonContent);
-        const parsedResult = JSON.parse(jsonContent);
-        console.log(`[${new Date().toISOString()}] 成功解析JSON结果:`, parsedResult);
         return parsedResult;
       } catch (parseError) {
-        console.error(`[${new Date().toISOString()}] JSON解析失败:`, parseError);
-        console.error('无法解析的内容:', content);
-        throw new Error('API返回的内容不是有效的JSON');
+        console.error(`[${new Date().toISOString()}] JSON parsing failed:`, parseError);
+        console.error('Content that failed parsing:', content);
+        // If parsing fails even in JSON mode, use fallback
+        console.warn('API response was not valid JSON despite requesting JSON format, using fallback.');
+        // Use destructured args for fallback call
+        return fallbackLogicAnalysis(buyRules, sellProfitRules, sellLossRules, riskMgmtSummary, language);
       }
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] API调用失败 (尝试 ${retries+1}/${API_RETRY_COUNT+1}):`, error);
-      console.error('错误详情:', error.message);
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] API call failed (Attempt ${retries + 1}/${API_RETRY_COUNT + 1}):`, error);
       if (error.response) {
-        console.error('API响应状态:', error.response.status);
-        console.error('API响应数据:', error.response.data);
+        console.error('API Response Status:', error.response.status);
+        console.error('API Response Data:', error.response.data);
       }
-      
+
       retries++;
-      
-      // 最后一次重试失败，使用本地评估逻辑
+
       if (retries > API_RETRY_COUNT) {
-        console.error(`[${new Date().toISOString()}] API调用彻底失败，使用本地评估`);
-        return fallbackLogicAnalysis(buyRules, sellRules, stopLossRules, riskManagement, language);
+        console.error(`[${new Date().toISOString()}] API call failed after all retries. Using fallback logic.`);
+        // Use destructured args for fallback call
+        return fallbackLogicAnalysis(buyRules, sellProfitRules, sellLossRules, riskMgmtSummary, language);
       }
-      
-      // 等待后重试
-      console.log(`[${new Date().toISOString()}] 等待1秒后重试...`);
+
+      console.log(`[${new Date().toISOString()}] Waiting 1 second before retry...`);
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
-  
-  // 永远不会执行到这里，但TypeScript需要一个返回值
-  throw new Error('Unreachable code');
+  // Should be unreachable due to fallback logic, but satisfies TypeScript
+  console.error(`[${new Date().toISOString()}] Reached theoretically unreachable code in analyzeLogicConsistency. Using fallback.`);
+  // Use destructured args for fallback call
+  return fallbackLogicAnalysis(buyRules, sellProfitRules, sellLossRules, riskMgmtSummary, language);
 };
 
-// 分析风险评估一致性
+/**
+ * Analyzes the consistency between stated risk tolerance, identified risks, and maximum acceptable loss.
+ * Uses the DeepSeek API with retry logic and falls back to local analysis on failure.
+ *
+ * @param args - Arguments for risk consistency analysis.
+ * @param args.riskTolerance - The user's stated risk tolerance level.
+ * @param args.riskIdentification - The risks identified by the user.
+ * @param args.maxLoss - The maximum loss the user is willing to accept.
+ * @param apiKey - The DeepSeek API key.
+ * @param language - The language for the API prompt ('zh' or 'en').
+ * @returns A promise resolving to the analysis result.
+ */
 export const analyzeRiskConsistency = async (
+  args: { riskTolerance: string; riskIdentification: string; maxLoss: string },
   apiKey: string,
-  riskTolerance: string,
-  riskIdentification: string,
-  maxLoss: string,
   language: 'zh' | 'en' = 'zh'
 ): Promise<DeepSeekAnalysisResult> => {
-  console.log(`[${new Date().toISOString()}] 开始调用analyzeRiskConsistency API`);
-  console.log(`API参数: apiKey=${apiKey ? '已提供' : '未提供'}, language=${language}`);
-  console.log(`风险承受能力: ${riskTolerance.substring(0, 50)}${riskTolerance.length > 50 ? '...' : ''}`);
-  console.log(`风险识别: ${riskIdentification.substring(0, 50)}${riskIdentification.length > 50 ? '...' : ''}`);
-  console.log(`最大损失容忍度: ${maxLoss.substring(0, 50)}${maxLoss.length > 50 ? '...' : ''}`);
-  
+  // Destructure args at the beginning
+  const { riskTolerance, riskIdentification, maxLoss } = args;
+  console.log(`[${new Date().toISOString()}] Calling analyzeRiskConsistency API`);
+  console.log(`API Params: apiKey=${apiKey ? 'Provided' : 'Not Provided'}, language=${language}`);
+  console.log(`Risk Tolerance: ${riskTolerance.substring(0, 50)}${riskTolerance.length > 50 ? '...' : ''}`);
+  console.log(`Risk Identification: ${riskIdentification.substring(0, 50)}${riskIdentification.length > 50 ? '...' : ''}`);
+  console.log(`Max Loss Tolerance: ${maxLoss.substring(0, 50)}${maxLoss.length > 50 ? '...' : ''}`);
+
   const client = createClient(apiKey);
   let retries = 0;
-  
-  // 系统提示
-  const systemPrompt = language === 'zh' 
-    ? `你是一位投资风险专家，评估投资决策的风险一致性。你需要分析风险承受能力、风险识别和最大损失容忍度之间是否存在矛盾或不一致。请仅返回JSON格式的评估结果。`
-    : `You are an investment risk expert evaluating the risk consistency of investment decisions. You need to analyze risk tolerance, risk identification, and maximum loss tolerance for contradictions or inconsistencies. Return evaluation results in JSON format only.`;
-  
-  // 用户提示
+
+  const systemPrompt = language === 'zh'
+    ? `你是一位投资风险管理专家。评估用户的风险承受能力、识别的风险以及最大可接受损失之间的一致性。请仅返回JSON格式。`
+    : `You are an investment risk management expert. Evaluate the consistency between the user's risk tolerance, identified risks, and maximum acceptable loss. Return results in JSON format only.`;
+
   const userPrompt = language === 'zh'
-    ? `请评估以下投资策略的风险一致性：
+    ? `评估以下风险相关信息的一致性：
       风险承受能力：${riskTolerance}
-      风险识别：${riskIdentification}
-      最大损失容忍度：${maxLoss}
-      
-      请返回包含以下字段的JSON：
-      1. consistencyScore: 风险一致性评分(0-10)
-      2. conflictPoints: 潜在矛盾点数组
-      3. suggestions: 改进建议数组
-      4. reasoningPath: 你的分析推理过程`
-    : `Please evaluate the risk consistency of the following investment strategy:
-      Risk tolerance: ${riskTolerance}
-      Risk identification: ${riskIdentification}
-      Maximum loss tolerance: ${maxLoss}
-      
-      Return a JSON with the following fields:
-      1. consistencyScore: Risk consistency score (0-10)
-      2. conflictPoints: Array of potential conflict points
-      3. suggestions: Array of improvement suggestions
-      4. reasoningPath: Your analytical reasoning process`;
-  
-  console.log(`[${new Date().toISOString()}] 准备发送API请求，系统提示长度: ${systemPrompt.length}, 用户提示长度: ${userPrompt.length}`);
+      已识别风险：${riskIdentification}
+      最大可接受损失：${maxLoss}
+
+      返回JSON对象，包含字段：consistencyScore (0-10 分数), conflictPoints (string[] 矛盾点), suggestions (string[] 建议), reasoningPath (string 分析过程)`
+    : `Evaluate the consistency of the following risk-related information:
+      Risk Tolerance: ${riskTolerance}
+      Identified Risks: ${riskIdentification}
+      Maximum Acceptable Loss: ${maxLoss}
+
+      Return a JSON object with fields: consistencyScore (0-10 score), conflictPoints (string[] conflicts), suggestions (string[] suggestions), reasoningPath (string analysis process)`;
+
+  console.log(`[${new Date().toISOString()}] Sending API request. System prompt length: ${systemPrompt.length}, User prompt length: ${userPrompt.length}`);
 
   while (retries <= API_RETRY_COUNT) {
     try {
-      console.log(`[${new Date().toISOString()}] 发送analyzeRiskConsistency API请求 (尝试 ${retries+1}/${API_RETRY_COUNT+1})`);
-      console.log(`请求模型: deepseek-chat`);
-      
+      console.log(`[${new Date().toISOString()}] Sending analyzeRiskConsistency request (Attempt ${retries + 1}/${API_RETRY_COUNT + 1})`);
+      console.log(`Model: deepseek-chat`);
+
       const completion = await client.chat.completions.create({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        model: "deepseek-chat"
+        model: "deepseek-chat",
+        response_format: { type: "json_object" } // Request JSON output
       });
-      
-      console.log(`[${new Date().toISOString()}] analyzeRiskConsistency API请求成功!`);
-      console.log('API返回完整结果:', completion);
-      
-      // 解析结果
+
       const content = completion.choices[0].message.content;
-      console.log('API返回内容:', content);
-      
+      console.log(`[${new Date().toISOString()}] analyzeRiskConsistency request successful!`);
+      console.log('API Raw Response:', completion);
+      console.log('API Content:', content);
+
+       if (!content) {
+         throw new Error('API returned empty content.');
+      }
+
       try {
-        // 检测并移除Markdown代码块标记
-        let jsonContent = content;
-        // 移除开头的```json或```等标记
-        if (jsonContent.startsWith('```')) {
-          const firstLineEnd = jsonContent.indexOf('\n');
-          if (firstLineEnd !== -1) {
-            jsonContent = jsonContent.substring(firstLineEnd + 1);
-          }
+        const parsedResult = JSON.parse(content);
+        console.log(`[${new Date().toISOString()}] Successfully parsed JSON result:`, parsedResult);
+        // Basic validation
+        if (typeof parsedResult.consistencyScore !== 'number' || !Array.isArray(parsedResult.conflictPoints) || !Array.isArray(parsedResult.suggestions)) {
+            console.warn("API response missing expected fields, using fallback structure.");
+            // Use destructured args for fallback call
+            return fallbackRiskAnalysis(riskTolerance, riskIdentification, maxLoss, language);
         }
-        // 移除结尾的```标记
-        if (jsonContent.endsWith('```')) {
-          jsonContent = jsonContent.substring(0, jsonContent.lastIndexOf('```'));
-        }
-        // 移除结尾的可能存在的换行符
-        jsonContent = jsonContent.trim();
-        
-        console.log(`[${new Date().toISOString()}] 处理后的JSON内容:`, jsonContent);
-        const parsedResult = JSON.parse(jsonContent);
-        console.log(`[${new Date().toISOString()}] 成功解析JSON结果:`, parsedResult);
         return parsedResult;
       } catch (parseError) {
-        console.error(`[${new Date().toISOString()}] JSON解析失败:`, parseError);
-        console.error('无法解析的内容:', content);
-        throw new Error('API返回的内容不是有效的JSON');
-      }
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] API调用失败 (尝试 ${retries+1}/${API_RETRY_COUNT+1}):`, error);
-      console.error('错误详情:', error.message);
-      if (error.response) {
-        console.error('API响应状态:', error.response.status);
-        console.error('API响应数据:', error.response.data);
-      }
-      
-      retries++;
-      
-      // 最后一次重试失败，使用本地评估逻辑
-      if (retries > API_RETRY_COUNT) {
-        console.error(`[${new Date().toISOString()}] API调用彻底失败，使用本地评估`);
+        console.error(`[${new Date().toISOString()}] JSON parsing failed:`, parseError);
+        console.error('Content that failed parsing:', content);
+        console.warn('API response was not valid JSON despite requesting JSON format, using fallback.');
+        // Use destructured args for fallback call
         return fallbackRiskAnalysis(riskTolerance, riskIdentification, maxLoss, language);
       }
-      
-      // 等待后重试
-      console.log(`[${new Date().toISOString()}] 等待1秒后重试...`);
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] API call failed (Attempt ${retries + 1}/${API_RETRY_COUNT + 1}):`, error);
+       if (error.response) {
+        console.error('API Response Status:', error.response.status);
+        console.error('API Response Data:', error.response.data);
+      }
+
+      retries++;
+
+      if (retries > API_RETRY_COUNT) {
+        console.error(`[${new Date().toISOString()}] API call failed after all retries. Using fallback risk analysis.`);
+        // Use destructured args for fallback call
+        return fallbackRiskAnalysis(riskTolerance, riskIdentification, maxLoss, language);
+      }
+
+      console.log(`[${new Date().toISOString()}] Waiting 1 second before retry...`);
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
-  
-  // 永远不会执行到这里，但TypeScript需要一个返回值
-  throw new Error('Unreachable code');
+  console.error(`[${new Date().toISOString()}] Reached theoretically unreachable code in analyzeRiskConsistency. Using fallback.`);
+  // Use destructured args for fallback call
+  return fallbackRiskAnalysis(riskTolerance, riskIdentification, maxLoss, language);
 };
 
-// 分析认知偏差
+/**
+ * Analyzes the user's awareness of cognitive biases and the effectiveness of their mitigation plan.
+ * Uses the DeepSeek API with retry logic and falls back to local analysis on failure.
+ *
+ * @param args - Arguments for cognitive bias analysis.
+ * @param args.biasChecks - User's answers to specific bias check questions (e.g., {'6-1': 'Yes', ...}).
+ * @param args.mitigationPlan - The user's plan to mitigate identified or potential biases.
+ * @param apiKey - The DeepSeek API key.
+ * @param language - The language for the API prompt ('zh' or 'en').
+ * @returns A promise resolving to the analysis result.
+ */
 export const analyzeCognitiveBiases = async (
+   args: { biasChecks: Record<string, any>; mitigationPlan: string },
   apiKey: string,
-  biasesAwareness: string,
-  biasMitigation: string,
   language: 'zh' | 'en' = 'zh'
 ): Promise<DeepSeekAnalysisResult> => {
-  console.log(`[${new Date().toISOString()}] 开始调用analyzeCognitiveBiases API`);
-  console.log(`API参数: apiKey=${apiKey ? '已提供' : '未提供'}, language=${language}`);
-  console.log(`认知偏差意识: ${biasesAwareness.substring(0, 50)}${biasesAwareness.length > 50 ? '...' : ''}`);
-  console.log(`偏差缓解措施: ${biasMitigation.substring(0, 50)}${biasMitigation.length > 50 ? '...' : ''}`);
-  
+  // Destructure args at the beginning
+  const { biasChecks, mitigationPlan } = args;
+  // Convert biasChecks object to a readable string format for the prompt
+  const biasAwarenessSummary = Object.entries(biasChecks)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(', ');
+    
+  console.log(`[${new Date().toISOString()}] Calling analyzeCognitiveBiases API`);
+  console.log(`API Params: apiKey=${apiKey ? 'Provided' : 'Not Provided'}, language=${language}`);
+  console.log(`Bias Awareness: ${biasAwarenessSummary}`);
+  console.log(`Bias Mitigation Plan: ${mitigationPlan.substring(0, 50)}${mitigationPlan.length > 50 ? '...' : ''}`);
+
   const client = createClient(apiKey);
   let retries = 0;
-  
-  // 系统提示
-  const systemPrompt = language === 'zh' 
-    ? `你是一位投资心理学专家，评估投资决策中的认知偏差。你需要分析投资者对自身认知偏差的认识程度以及为减轻这些偏差所采取的措施是否充分有效。请仅返回JSON格式的评估结果。`
-    : `You are an investment psychology expert evaluating cognitive biases in investment decisions. You need to analyze the investor's awareness of their cognitive biases and the effectiveness of measures taken to mitigate these biases. Return evaluation results in JSON format only.`;
-  
-  // 用户提示
+
+  const systemPrompt = language === 'zh'
+    ? `你是一位行为金融学专家。评估用户对潜在认知偏差的认识程度以及其制定的应对措施的有效性。请仅返回JSON格式。`
+    : `You are a behavioral finance expert. Evaluate the user's awareness of potential cognitive biases and the effectiveness of their mitigation plan. Return results in JSON format only.`;
+
   const userPrompt = language === 'zh'
-    ? `请评估以下投资者的认知偏差管理：
-      认知偏差意识：${biasesAwareness}
-      偏差缓解措施：${biasMitigation}
-      
-      请返回包含以下字段的JSON：
-      1. consistencyScore: 认知偏差管理评分(0-10)
-      2. conflictPoints: 潜在认知偏差问题数组
-      3. suggestions: 改进建议数组
-      4. reasoningPath: 你的分析推理过程`
-    : `Please evaluate the following investor's cognitive bias management:
-      Cognitive bias awareness: ${biasesAwareness}
-      Bias mitigation measures: ${biasMitigation}
-      
-      Return a JSON with the following fields:
-      1. consistencyScore: Cognitive bias management score (0-10)
-      2. conflictPoints: Array of potential cognitive bias issues
-      3. suggestions: Array of improvement suggestions
-      4. reasoningPath: Your analytical reasoning process`;
-  
-  console.log(`[${new Date().toISOString()}] 准备发送API请求，系统提示长度: ${systemPrompt.length}, 用户提示长度: ${userPrompt.length}`);
+    ? `评估以下关于认知偏差的信息：
+      认知偏差自我检查结果：${biasAwarenessSummary}
+      应对偏差的措施：${mitigationPlan}
+
+      返回JSON对象，包含字段：consistencyScore (0-10 分数，代表偏差应对的有效性), conflictPoints (string[] 指出识别到的偏差或措施的不足), suggestions (string[] 改进建议), reasoningPath (string 分析过程)`
+    : `Evaluate the following information regarding cognitive biases:
+      Cognitive Bias Self-Check Results: ${biasAwarenessSummary}
+      Measures to Address Biases: ${mitigationPlan}
+
+      Return a JSON object with fields: consistencyScore (0-10 score, representing effectiveness of bias mitigation), conflictPoints (string[] identified biases or mitigation weaknesses), suggestions (string[] improvement suggestions), reasoningPath (string analysis process)`;
+
+  console.log(`[${new Date().toISOString()}] Sending API request. System prompt length: ${systemPrompt.length}, User prompt length: ${userPrompt.length}`);
 
   while (retries <= API_RETRY_COUNT) {
     try {
-      console.log(`[${new Date().toISOString()}] 发送analyzeCognitiveBiases API请求 (尝试 ${retries+1}/${API_RETRY_COUNT+1})`);
-      console.log(`请求模型: deepseek-chat`);
-      
+      console.log(`[${new Date().toISOString()}] Sending analyzeCognitiveBiases request (Attempt ${retries + 1}/${API_RETRY_COUNT + 1})`);
+      console.log(`Model: deepseek-chat`);
+
       const completion = await client.chat.completions.create({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        model: "deepseek-chat"
+        model: "deepseek-chat",
+        response_format: { type: "json_object" } // Request JSON output
       });
-      
-      console.log(`[${new Date().toISOString()}] analyzeCognitiveBiases API请求成功!`);
-      console.log('API返回完整结果:', completion);
-      
-      // 解析结果
+
       const content = completion.choices[0].message.content;
-      console.log('API返回内容:', content);
-      
+      console.log(`[${new Date().toISOString()}] analyzeCognitiveBiases request successful!`);
+      console.log('API Raw Response:', completion);
+      console.log('API Content:', content);
+
+      if (!content) {
+         throw new Error('API returned empty content.');
+      }
+
       try {
-        // 检测并移除Markdown代码块标记
-        let jsonContent = content;
-        // 移除开头的```json或```等标记
-        if (jsonContent.startsWith('```')) {
-          const firstLineEnd = jsonContent.indexOf('\n');
-          if (firstLineEnd !== -1) {
-            jsonContent = jsonContent.substring(firstLineEnd + 1);
-          }
+        const parsedResult = JSON.parse(content);
+        console.log(`[${new Date().toISOString()}] Successfully parsed JSON result:`, parsedResult);
+         // Basic validation
+        if (typeof parsedResult.consistencyScore !== 'number' || !Array.isArray(parsedResult.conflictPoints) || !Array.isArray(parsedResult.suggestions)) {
+            console.warn("API response missing expected fields, using fallback structure.");
+            // Use constructed biasAwarenessSummary and destructured mitigationPlan for fallback call
+            return fallbackBiasAnalysis(biasAwarenessSummary, mitigationPlan, language);
         }
-        // 移除结尾的```标记
-        if (jsonContent.endsWith('```')) {
-          jsonContent = jsonContent.substring(0, jsonContent.lastIndexOf('```'));
-        }
-        // 移除结尾的可能存在的换行符
-        jsonContent = jsonContent.trim();
-        
-        console.log(`[${new Date().toISOString()}] 处理后的JSON内容:`, jsonContent);
-        const parsedResult = JSON.parse(jsonContent);
-        console.log(`[${new Date().toISOString()}] 成功解析JSON结果:`, parsedResult);
         return parsedResult;
       } catch (parseError) {
-        console.error(`[${new Date().toISOString()}] JSON解析失败:`, parseError);
-        console.error('无法解析的内容:', content);
-        throw new Error('API返回的内容不是有效的JSON');
+        console.error(`[${new Date().toISOString()}] JSON parsing failed:`, parseError);
+        console.error('Content that failed parsing:', content);
+         console.warn('API response was not valid JSON despite requesting JSON format, using fallback.');
+         // Use constructed biasAwarenessSummary and destructured mitigationPlan for fallback call
+        return fallbackBiasAnalysis(biasAwarenessSummary, mitigationPlan, language);
       }
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] API调用失败 (尝试 ${retries+1}/${API_RETRY_COUNT+1}):`, error);
-      console.error('错误详情:', error.message);
-      if (error.response) {
-        console.error('API响应状态:', error.response.status);
-        console.error('API响应数据:', error.response.data);
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] API call failed (Attempt ${retries + 1}/${API_RETRY_COUNT + 1}):`, error);
+       if (error.response) {
+        console.error('API Response Status:', error.response.status);
+        console.error('API Response Data:', error.response.data);
       }
-      
+
       retries++;
-      
-      // 最后一次重试失败，使用本地评估逻辑
+
       if (retries > API_RETRY_COUNT) {
-        console.error(`[${new Date().toISOString()}] API调用彻底失败，使用本地评估`);
-        return fallbackBiasAnalysis(biasesAwareness, biasMitigation, language);
+        console.error(`[${new Date().toISOString()}] API call failed after all retries. Using fallback bias analysis.`);
+        // Use constructed biasAwarenessSummary and destructured mitigationPlan for fallback call
+        return fallbackBiasAnalysis(biasAwarenessSummary, mitigationPlan, language);
       }
-      
-      // 等待后重试
-      console.log(`[${new Date().toISOString()}] 等待1秒后重试...`);
+
+      console.log(`[${new Date().toISOString()}] Waiting 1 second before retry...`);
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
-  
-  // 永远不会执行到这里，但TypeScript需要一个返回值
-  throw new Error('Unreachable code');
+  console.error(`[${new Date().toISOString()}] Reached theoretically unreachable code in analyzeCognitiveBiases. Using fallback.`);
+  // Use constructed biasAwarenessSummary and destructured mitigationPlan for fallback call
+  return fallbackBiasAnalysis(biasAwarenessSummary, mitigationPlan, language);
 };
 
-// 使用从apiUtils.ts导入的fallback函数
+/**
+ * Helper function to safely parse JSON, removing potential markdown formatting.
+ * @deprecated JSON mode in API calls should handle this. Kept for reference.
+ * @param content - The raw string content from the API.
+ * @returns The parsed JSON object or null if parsing fails.
+ */
+/*
+const safeJsonParse = (content: string | null): any | null => {
+  if (!content) return null;
+  try {
+    // Remove potential markdown code block fences
+    let jsonContent = content.trim();
+    if (jsonContent.startsWith('```json')) {
+      jsonContent = jsonContent.substring(7);
+    } else if (jsonContent.startsWith('```')) {
+      jsonContent = jsonContent.substring(3);
+    }
+    if (jsonContent.endsWith('```')) {
+      jsonContent = jsonContent.substring(0, jsonContent.length - 3);
+    }
+    jsonContent = jsonContent.trim();
+    return JSON.parse(jsonContent);
+  } catch (e) {
+    console.error("Safe JSON parse failed:", e);
+    console.error("Content attempted:", content);
+    return null;
+  }
+};
+*/

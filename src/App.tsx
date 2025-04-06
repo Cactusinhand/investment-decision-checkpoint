@@ -31,10 +31,11 @@ import { InvestmentEvaluation } from './components/investment-evaluation';
 import { InvestmentDecision, RiskAssessmentResult, UserProfile, Question, EvaluationResult } from './types';
 import { translations } from './constants/index';
 
-
-
-
-// Helper function to simulate saving data (replace with actual API calls)
+/**
+ * Helper function to simulate saving data (replace with actual API calls)
+ * @param data The data to be saved (can be any type).
+ * @returns A promise resolving to an object indicating success and the saved data.
+ */
 const saveData = async (data: any) => {
   // Simulate network latency
   await new Promise((resolve) => setTimeout(resolve, 500));
@@ -43,35 +44,46 @@ const saveData = async (data: any) => {
   return { success: true, data }; // Return a success/failure indicator
 };
 
-
 const App: React.FC = () => {
-  // State
+  // State Variables
+  /** User profile information. Replace initial value with actual login/profile loading logic. */
   const [user, setUser] = useState<UserProfile | null>({
-    id: 'user123',
-    name: 'John Doe',
-    riskTolerance: 'Moderate',
-    preferredStrategies: ['Value Investing', 'Growth Investing'],
+    id: 'user123', // Example User ID
+    name: 'John Doe', // Example User Name
+    riskTolerance: '稳健型', // Example Risk Tolerance (Consider loading dynamically)
+    preferredStrategies: ['Value Investing', 'Growth Investing'], // Example Strategies
   });
+  /** The currently active (being edited or viewed) investment decision. */
   const [currentDecision, setCurrentDecision] = useState<InvestmentDecision | null>(null);
-  const [decisions, setDecisions] = useState<InvestmentDecision[]>([]); // Load from local storage
+  /** List of all investment decisions made by the user. Loaded from local storage. */
+  const [decisions, setDecisions] = useState<InvestmentDecision[]>([]);
+  /** The current stage (1-7) of the investment checkpoint being displayed. */
   const [currentStage, setCurrentStage] = useState(1);
-  const [setLoading] = useState(false);
+  /** Loading state, typically for asynchronous operations (e.g., API calls, saving). */
+  const [isLoading, setLoading] = useState(false);
+  /** Indicates if data is currently being saved (e.g., to local storage or backend). */
   const [isSaving, setIsSaving] = useState(false);
+  /** Holds any error message to be displayed to the user. */
   const [error, setError] = useState<string | null>(null);
+  /** Controls whether the current decision form is in edit mode or view mode. */
   const [isEditing, setIsEditing] = useState(false);
+  /** Current theme setting ('light', 'dark', or 'system' preference). */
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
-  const [language, setLanguage] = useState<'en' | 'zh'>('zh'); // Set default to Chinese
+  /** Current language setting ('en' or 'zh'). */
+  const [language, setLanguage] = useState<'en' | 'zh'>('zh');
+  /** Translated questions based on the selected language. */
   const [translatedQuestions, setTranslatedQuestions] = useState<{ [key: number]: Question[] }>(rawQuestions);
+  /** Authentication status (true if logged in, false otherwise). Should be replaced with actual auth state. */
   const [isLoggedIn, setIsLoggedIn] = useState(true); // Simulate logged-in state
-  // 添加风险评估的开关状态
+  /** Controls the visibility of the Risk Assessment modal/component. */
   const [isRiskAssessmentOpen, setIsRiskAssessmentOpen] = useState(false);
-  // 添加风险评估结果状态
+  /** Stores the result from the completed risk assessment. */
   const [riskAssessmentResult, setRiskAssessmentResult] = useState<RiskAssessmentResult | null>(null);
-  // 添加投资评估的开关状态
+  /** Controls the visibility of the Investment Evaluation modal/component. */
   const [isInvestmentEvaluationOpen, setIsInvestmentEvaluationOpen] = useState(false);
-  // 添加当前评估的决策状态
+  /** The decision currently being evaluated or whose results are being viewed. */
   const [evaluatingDecision, setEvaluatingDecision] = useState<InvestmentDecision | null>(null);
-  // DeepSeek API密钥（从环境变量获取）
+  /** Stores the DeepSeek API key, loaded from environment variables. */
   const [apiKey, setApiKey] = useState<string>("");
   
   // 从环境变量加载API密钥
@@ -104,55 +116,6 @@ const App: React.FC = () => {
       localStorage.setItem('investmentDecisions', JSON.stringify(decisions));
     }
   }, [decisions]);
-
-  // 添加处理风险评估完成的回调
-  const handleRiskAssessmentComplete = (result: RiskAssessmentResult) => {
-    // 保存完整的风险评估结果
-    setRiskAssessmentResult(result);
-
-    // 更新用户风险承受能力
-    if (user) {
-      setUser({
-        ...user,
-        riskTolerance: result.name
-      });
-    }
-  };
-  
-  // 添加处理投资评估完成的回调
-  const handleInvestmentEvaluationComplete = (result: EvaluationResult) => {
-    if (!evaluatingDecision) return;
-    
-    // 更新决策的评估结果
-    const updatedDecision: InvestmentDecision = {
-      ...evaluatingDecision,
-      evaluated: true,
-      evaluationScore: result.totalScore,
-      evaluationResult: result
-    };
-    
-    // 更新决策列表
-    setDecisions(decisions.map(d => 
-      d.id === updatedDecision.id ? updatedDecision : d
-    ));
-    
-    // 关闭评估模态框
-    setIsInvestmentEvaluationOpen(false);
-    setEvaluatingDecision(null);
-  };
-  
-  // 开始评估决策或查看已有评估
-  const startEvaluateDecision = (decision: InvestmentDecision) => {
-    // 只能评估已完成的决策
-    if (!decision.completed) {
-      setError(language === 'zh' ? '只能评估已完成的决策' : 'Can only evaluate completed decisions');
-      return;
-    }
-    
-    // 设置当前评估的决策
-    setEvaluatingDecision(decision);
-    setIsInvestmentEvaluationOpen(true);
-  };
 
   // Apply theme
   useEffect(() => {
@@ -230,9 +193,74 @@ const App: React.FC = () => {
     setTranslatedQuestions(translated);
   }, [language]);
 
-  // Helper Functions
+  // --- Callback Handlers --- //
 
-  // Initialize a new decision or load an existing one
+  /** 
+   * Callback triggered when the Risk Assessment component completes.
+   * Updates the risk assessment result state and the user's profile risk tolerance.
+   * @param result - The result object from the risk assessment.
+   */
+  const handleRiskAssessmentComplete = (result: RiskAssessmentResult) => {
+    // 保存完整的风险评估结果
+    setRiskAssessmentResult(result);
+
+    // 更新用户风险承受能力 - 使用 type 标识符
+    if (user) {
+      setUser({
+        ...user,
+        riskTolerance: result.type // 使用与语言无关的 type
+      });
+    }
+  };
+  
+  /**
+   * Callback triggered when the Investment Evaluation component completes.
+   * Updates the evaluated decision with the results and closes the evaluation modal.
+   * @param result - The evaluation result object.
+   */
+  const handleInvestmentEvaluationComplete = (result: EvaluationResult) => {
+    if (!evaluatingDecision) return;
+    
+    // 更新决策的评估结果
+    const updatedDecision: InvestmentDecision = {
+      ...evaluatingDecision,
+      evaluated: true,
+      evaluationScore: result.totalScore,
+      evaluationResult: result
+    };
+    
+    // 更新决策列表
+    setDecisions(decisions.map(d => 
+      d.id === updatedDecision.id ? updatedDecision : d
+    ));
+    
+    // 关闭评估模态框
+    setIsInvestmentEvaluationOpen(false);
+    setEvaluatingDecision(null);
+  };
+  
+  /**
+   * Initiates the evaluation process for a completed decision or opens the results view.
+   * Sets the decision to be evaluated and opens the evaluation modal.
+   * @param decision - The decision to evaluate or view.
+   */
+  const startEvaluateDecision = (decision: InvestmentDecision) => {
+    // 只能评估已完成的决策
+    if (!decision.completed) {
+      setError(language === 'zh' ? '只能评估已完成的决策' : 'Can only evaluate completed decisions');
+      return;
+    }
+    
+    // 设置当前评估的决策
+    setEvaluatingDecision(decision);
+    setIsInvestmentEvaluationOpen(true);
+  };
+
+  /** 
+   * Initializes a new investment decision process or loads an existing one for editing/viewing.
+   * Sets the current decision, stage, and editing mode.
+   * @param decisionId - Optional ID of an existing decision to load.
+   */
   const startNewDecision = useCallback((decisionId?: string) => {
     if (!isLoggedIn) return; // Prevent if not logged in
 
@@ -436,78 +464,38 @@ const App: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="relative group">
                       <p className="text-gray-900 dark:text-white cursor-help border-b border-dotted border-gray-500">
-                        {/* 查找对应的风险类型并根据当前语言显示名称 */}
-                        {(() => {
-                          // 如果没有评估结果，直接显示user中的风险承受能力
-                          if (!user?.riskTolerance) return '';
-
-                          // 查找对应的风险类型
-                          for (const [type, profile] of Object.entries(riskProfiles)) {
-                            if (profile.zh.name === user.riskTolerance ||
-                              profile.en.name === user.riskTolerance) {
-                              // 返回当前语言对应的名称
-                              return profile[language].name;
-                            }
-                          }
-
-                          // 如果没找到匹配的，检查是否是英文风险类型，如果是则翻译为中文
-                          if (language === 'zh') {
-                            // 检查是否是英文风险类型，并返回对应的中文
-                            const translationKeys = {
-                              'Conservative': '保守型',
-                              'Moderate': '适中型',
-                              'Aggressive': '激进型'
-                            };
-                            
-                            // 如果找到对应的翻译，返回中文
-                            if (translationKeys[user.riskTolerance as keyof typeof translationKeys]) {
-                              return translationKeys[user.riskTolerance as keyof typeof translationKeys];
-                            }
-                          }
-                          
-                          // 如果没有找到匹配的翻译，返回原始值
-                          return user.riskTolerance;
-                        })()}
+                        {/* Use riskTolerance (type) from user state and find the name from riskProfiles */}
+                        {user?.riskTolerance
+                          ? riskProfiles[user.riskTolerance]?.[language]?.name || user.riskTolerance
+                          : ''}
                       </p>
 
-                      {/* 悬浮提示 */}
+                      {/* 悬浮提示 - Use riskAssessmentResult.type */}
                       <div className="absolute left-0 w-64 px-4 py-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg 
                                     opacity-0 invisible group-hover:opacity-100 group-hover:visible 
                                     transition-all duration-300 z-10 -translate-y-full -mt-2">
                         {(() => {
-                          // 如果没有评估结果，显示简单提示
-                          if (!riskAssessmentResult) {
+                          if (!riskAssessmentResult?.type) {
                             return language === 'zh'
                               ? '点击"评估风险"按钮进行风险评估'
                               : 'Click "Assess Risk" button to evaluate risk';
                           }
 
-                          // 使用当前语言显示评估结果
-                          const result = riskAssessmentResult;
-
-                          // 查找对应的风险类型完整信息
-                          let profileInfo;
-                          for (const [type, profile] of Object.entries(riskProfiles)) {
-                            if (profile.zh.name === result.name ||
-                              profile.en.name === result.name) {
-                              profileInfo = profile[language];
-                              break;
-                            }
-                          }
+                          const profileInfo = riskProfiles[riskAssessmentResult.type]?.[language];
 
                           return (
                             <>
                               <div className="font-bold mb-1">
-                                {language === 'zh' ? '风险类型' : 'Risk Type'}: {profileInfo?.name || result.name}
+                                {language === 'zh' ? '风险类型' : 'Risk Type'}: {profileInfo?.name || riskAssessmentResult.name}
                               </div>
                               <div className="mb-1">
-                                {language === 'zh' ? '风险评分' : 'Risk Score'}: {result.score}
+                                {language === 'zh' ? '风险评分' : 'Risk Score'}: {riskAssessmentResult.score}
                               </div>
                               <div className="mb-1 text-xs">
-                                {language === 'zh' ? '特征描述' : 'Description'}: {profileInfo?.description || result.description}
+                                {language === 'zh' ? '特征描述' : 'Description'}: {profileInfo?.description || riskAssessmentResult.description}
                               </div>
                               <div className="text-xs">
-                                {language === 'zh' ? '投资建议' : 'Recommendation'}: {profileInfo?.recommendation || result.recommendation}
+                                {language === 'zh' ? '投资建议' : 'Recommendation'}: {profileInfo?.recommendation || riskAssessmentResult.recommendation}
                               </div>
                             </>
                           );
@@ -532,17 +520,11 @@ const App: React.FC = () => {
                   </span>
                   <div className="relative group">
                     <p className="text-gray-900 dark:text-white cursor-help border-b border-dotted border-gray-500">
-                      {(() => {
-                        // 获取已评估的决策
-                        const evaluatedDecisions = decisions.filter(d => d.completed && d.evaluated && d.evaluationScore !== undefined);
-                        
-                        // 如果没有已评估的决策，显示默认策略
-                        if (evaluatedDecisions.length === 0) {
-                          // 如果用户有预设的偏好策略，则显示这些策略
-                          if (user?.preferredStrategies && user.preferredStrategies.length > 0) {
-                            return user.preferredStrategies.map(strategy => {
-                              // 尝试翻译策略名称
-                              // 根据策略名称查找对应的翻译键
+                      {/* Directly display user's preferred strategies */}
+                      {user?.preferredStrategies && user.preferredStrategies.length > 0
+                        ? user.preferredStrategies
+                            .map(strategy => {
+                              // Translate strategy names if possible
                               if (strategy === 'Value Investing') return translations[language].valueInvesting;
                               if (strategy === 'Growth Investing') return translations[language].growthInvesting;
                               if (strategy === 'Index Investing') return translations[language].indexInvesting;
@@ -550,96 +532,33 @@ const App: React.FC = () => {
                               if (strategy === 'Blue-Chip Investing') return translations[language].blueChipInvesting;
                               if (strategy === 'Conservative Investing') return translations[language].conservativeInvesting;
                               if (strategy === 'Bond Investing') return translations[language].bondInvesting;
-                              // 如果没有找到对应的翻译，返回原始策略名称
-                              return strategy;
-                            }).join(', ');
-                          }
-                          // 否则显示暂无推荐策略
-                          return translations[language].noRecommendedStrategies;
-                        }
-                        
-                        // 计算平均评分
-                        const totalScore = evaluatedDecisions.reduce((sum, decision) => sum + (decision.evaluationScore || 0), 0);
-                        const averageScore = Math.round(totalScore / evaluatedDecisions.length);
-                        
-                        // 根据评分推荐策略
-                        let recommendedStrategies: string[] = [];
-                        
-                        // 根据评分区间推荐不同的策略组合
-                        if (averageScore >= 85) { // 系统性投资者
-                          recommendedStrategies = [
-                            translations[language].valueInvesting,
-                            translations[language].growthInvesting,
-                            translations[language].quantitativeAnalysis,
-                            translations[language].diversification
-                          ];
-                        } else if (averageScore >= 70) { // 稳健型投资者
-                          recommendedStrategies = [
-                            translations[language].valueInvesting,
-                            translations[language].indexInvesting,
-                            translations[language].diversification,
-                            translations[language].dollarCostAveraging
-                          ];
-                        } else if (averageScore >= 55) { // 谨慎型投资者
-                          recommendedStrategies = [
-                            translations[language].blueChipInvesting,
-                            translations[language].indexInvesting,
-                            translations[language].dollarCostAveraging,
-                            translations[language].diversification
-                          ];
-                        } else { // 高风险型投资者
-                          recommendedStrategies = [
-                            translations[language].conservativeInvesting,
-                            translations[language].bondInvesting,
-                            translations[language].blueChipInvesting,
-                            translations[language].dollarCostAveraging
-                          ];
-                        }
-                        
-                        // 更新用户的偏好策略
-                        if (user && JSON.stringify(user.preferredStrategies) !== JSON.stringify(recommendedStrategies)) {
-                          setUser({
-                            ...user,
-                            preferredStrategies: recommendedStrategies
-                          });
-                        }
-                        
-                        return recommendedStrategies.join(', ');
-                      })()}
+                              return strategy; // Fallback to original name
+                            })
+                            .join(', ')
+                        : translations[language].noPreferredStrategies}
                     </p>
-                    
-                    {/* 悬浮提示 */}
+
+                    {/* Keep the tooltip to show recommended strategies based on evaluation */}
                     <div className="absolute left-0 w-64 px-4 py-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg 
                                   opacity-0 invisible group-hover:opacity-100 group-hover:visible 
                                   transition-all duration-300 z-10 -translate-y-full -mt-2">
                       {(() => {
-                        // 获取已评估的决策
                         const evaluatedDecisions = decisions.filter(d => d.completed && d.evaluated && d.evaluationScore !== undefined);
-                        
-                        // 如果没有已评估的决策，显示提示信息
                         if (evaluatedDecisions.length === 0) {
                           return translations[language].strategyRecommendationHint;
                         }
-                        
-                        // 计算平均评分
                         const totalScore = evaluatedDecisions.reduce((sum, decision) => sum + (decision.evaluationScore || 0), 0);
                         const averageScore = Math.round(totalScore / evaluatedDecisions.length);
-                        
-                        // 确定评分等级
                         let ratingKey = 'high-risk';
                         if (averageScore >= 85) ratingKey = 'system';
                         else if (averageScore >= 70) ratingKey = 'stable';
                         else if (averageScore >= 55) ratingKey = 'cautious';
-                        
-                        // 获取评分等级的翻译
                         const ratingTranslations: Record<string, string> = {
                           'system': language === 'zh' ? '系统性' : 'Systematic',
                           'stable': language === 'zh' ? '稳健型' : 'Stable',
                           'cautious': language === 'zh' ? '谨慎型' : 'Cautious',
                           'high-risk': language === 'zh' ? '高风险型' : 'High-risk'
                         };
-                        
-                        // 格式化提示信息
                         const baseText = translations[language].strategyRecommendationBased;
                         return baseText
                           .replace('{0}', ratingTranslations[ratingKey])
@@ -893,7 +812,7 @@ const App: React.FC = () => {
                 setIsInvestmentEvaluationOpen(false);
                 setEvaluatingDecision(null);
               }}
-              translations={translations[language]}
+              translations={translations}
               apiKey={apiKey}
             />
           </div>

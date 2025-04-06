@@ -116,7 +116,13 @@ export const rawQuestions: { [key: number]: Question[] } = {
       id: '5-1',
       text: 'What sources of information will you use for research?',
       type: 'checkbox',
-      options: ['Company Filings', 'Bloomberg/Reuters Data', 'Analyst Reports', 'Independent Third-party Audits'],
+      options: [
+        'Company Filings',
+        'Bloomberg/Reuters Data',
+        'Analyst Reports',
+        'Independent Third-party Audits',
+        'Social Media (e.g., Douyin, Xiaohongshu)'
+      ],
       required: true
     },
     {
@@ -452,6 +458,7 @@ export const optionToTranslationKey: Record<string, string> = {
   'Bloomberg/Reuters Data': 'bloombergReutersData',
   'Analyst Reports': 'analystReportsDetail',
   'Independent Third-party Audits': 'independentThirdPartyAudits',
+  'Social Media (e.g., Douyin, Xiaohongshu)': 'socialMediaDetail',
   'Monthly': 'monthly',
   'Quarterly': 'quarterly',
   'Event-driven (e.g., earnings release)': 'eventDriven',

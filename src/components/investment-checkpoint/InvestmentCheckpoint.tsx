@@ -19,34 +19,63 @@ import { translations } from '../../constants/index';
 
 import { renderQuestion } from './utils';
 
+// Animation variants for stage transitions
 const stageVariants = {
   initial: { opacity: 0, y: 50 },
   animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
   exit: { opacity: 0, y: -50, transition: { duration: 0.3, ease: "easeIn" } }
 };
 
+// Animation variants for the main card appearance/disappearance
 const cardVariants = {
   hidden: { opacity: 0, y: 50 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeInOut' } },
   exit: { opacity: 0, y: -50, transition: { duration: 0.3 } },
 };
 
+/**
+ * InvestmentCheckpoint Component
+ * 
+ * Guides the user through the 7 stages of creating an investment decision.
+ * Handles:
+ * - Displaying questions for the current stage.
+ * - Storing answers locally as the user progresses.
+ * - Validating required fields before moving to the next stage or completing.
+ * - Navigating between stages (previous/next).
+ * - Saving the completed decision.
+ * - Cancelling the process.
+ * - Deleting an existing decision (if editing).
+ * - Displaying validation errors.
+ * - Supporting a read-only mode.
+ */
 export const InvestmentCheckpoint: React.FC<InvestmentCheckpointProps> = ({
+  /** The decision object currently being created or edited. Passed from the parent. */
   currentDecision,
+  /** Flag indicating if an existing decision is being edited (true) or a new one is being created (false). */
   isEditing,
+  /** Flag indicating if a save operation is in progress (shows loading state). */
   isSaving,
+  /** Current application language ('en' or 'zh'). */
   language,
+  /** Callback function to save the decision (either partially or completed). */
   onSave,
+  /** Callback function to cancel the checkpoint process. */
   onCancel,
+  /** Optional callback function to delete the current decision (only relevant when isEditing is true). */
   onDelete,
-  readOnly = false, // 添加只读模式属性，默认为false
+  /** If true, displays the checkpoint in read-only mode, preventing edits. Defaults to false. */
+  readOnly = false,
 }) => {
+  /** Tracks the current stage (1-7) being displayed to the user. */
   const [currentStage, setCurrentStage] = useState(1);
+  /** Local copy of the decision being edited/created. Allows changes without directly modifying the parent state until save. */
   const [localDecision, setLocalDecision] = useState<InvestmentDecision | null>(null);
+  /** Stores any validation or save error messages to be displayed. */
   const [error, setError] = useState<string | null>(null);
+  /** State to track if validation has been triggered (e.g., on Next/Complete click), used for highlighting errors. */
   const [validatedFields, setValidatedFields] = useState<boolean>(false);
 
-  // Initialize local state when currentDecision changes
+  /** Effect to initialize the local state (localDecision, currentStage) when the parent passes a new currentDecision. */
   useEffect(() => {
     if (currentDecision) {
       setLocalDecision(currentDecision);
@@ -54,6 +83,13 @@ export const InvestmentCheckpoint: React.FC<InvestmentCheckpointProps> = ({
     }
   }, [currentDecision]);
 
+  /**
+   * Handles input changes for any question.
+   * Updates the localDecision state with the new answer.
+   * Does nothing if in readOnly mode.
+   * @param questionId - The ID of the question being answered.
+   * @param value - The new answer value.
+   */
   const handleInputChange = (questionId: string, value: any) => {
     if (!localDecision || readOnly) return; // 在只读模式下不允许修改
 
@@ -67,6 +103,12 @@ export const InvestmentCheckpoint: React.FC<InvestmentCheckpointProps> = ({
     );
   };
 
+  /** 
+   * Handles moving to the next stage.
+   * Performs validation for the current stage's required questions.
+   * Updates the localDecision state with the incremented stage number.
+   * Scrolls to and focuses the first unanswered required question if validation fails.
+   */
   const handleNextStage = async () => {
     if (!localDecision) return;
 
@@ -120,6 +162,7 @@ export const InvestmentCheckpoint: React.FC<InvestmentCheckpointProps> = ({
     }
   };
 
+  /** Handles moving to the previous stage. Updates localDecision state. */
   const handlePreviousStage = () => {
     if (currentStage > 1 && localDecision) {
       setLocalDecision({ ...localDecision, stage: currentStage - 1 });
@@ -127,6 +170,13 @@ export const InvestmentCheckpoint: React.FC<InvestmentCheckpointProps> = ({
     }
   };
 
+  /** 
+   * Handles completing the decision-making process.
+   * Performs final validation for the last stage's required questions.
+   * Marks the decision as completed in the local state.
+   * Calls the onSave callback with the completed decision.
+   * Scrolls to and focuses the first unanswered required question if validation fails.
+   */
   const handleCompleteDecision = async () => {
     if (!localDecision) return;
 

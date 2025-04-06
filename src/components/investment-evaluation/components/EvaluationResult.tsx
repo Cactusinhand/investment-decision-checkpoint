@@ -28,6 +28,7 @@ interface EvaluationResultProps {
   language: 'zh' | 'en';
   onClose: () => void;
   onSave: () => void;
+  translations: Record<string, Record<string, string>>;
 }
 
 const EvaluationResultDisplay: React.FC<EvaluationResultProps> = ({
@@ -35,7 +36,8 @@ const EvaluationResultDisplay: React.FC<EvaluationResultProps> = ({
   result,
   language,
   onClose,
-  onSave
+  onSave,
+  translations
 }) => {
   const { 
     totalScore, 
@@ -106,6 +108,10 @@ const EvaluationResultDisplay: React.FC<EvaluationResultProps> = ({
     }
   };
   
+  const handleSaveAndComplete = () => {
+    onSave();
+  };
+
   return (
     <Card className="w-full shadow-lg dark:bg-gray-800 dark:border-gray-700">
       <CardHeader>
@@ -270,14 +276,14 @@ const EvaluationResultDisplay: React.FC<EvaluationResultProps> = ({
             variant="secondary"
             onClick={onClose}
           >
-            {language === 'zh' ? '返回' : 'Back'}
+            {translations[language].goBack || 'Back'}
           </Button>
           
           <Button
-            onClick={onSave}
+            onClick={handleSaveAndComplete}
             className="bg-green-500 hover:bg-green-600 text-white"
           >
-            {language === 'zh' ? '保存并完成' : 'Save & Complete'}
+            {translations[language].saveAndComplete || 'Save & Complete'}
           </Button>
         </div>
       </CardFooter>

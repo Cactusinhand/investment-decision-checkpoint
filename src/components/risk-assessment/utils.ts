@@ -1,6 +1,7 @@
 import { RiskAssessmentAnswers, RiskAssessmentResult } from './types';
 import { riskProfiles } from './RiskProfiles';
 import { riskAssessmentQuestions, riskAssessmentWeights } from './RiskAssessmentQuestions';
+import { RiskProfileType } from '../../types/index';
 
 // 从选项文本中提取分数
 export const extractScoreFromOption = (optionText: string | string[], language: 'zh' | 'en'): number => {
@@ -174,11 +175,12 @@ export const calculateRiskScore = (
     : demo1Answer.includes('>50 years');
 
   // 预判断用户的风险类型是否为激进型
-  let preliminaryRiskType = 'conservative';
-  for (const [type, profile] of Object.entries(riskProfiles)) {
+  let preliminaryRiskType: RiskProfileType = 'conservative';
+  for (const type in riskProfiles) {
+    const profile = riskProfiles[type as RiskProfileType];
     const scoreRange = profile[language].scoreRange;
     if (finalScore >= scoreRange[0] && finalScore <= scoreRange[1]) {
-      preliminaryRiskType = type;
+      preliminaryRiskType = type as RiskProfileType;
       break;
     }
   }
@@ -194,24 +196,27 @@ export const calculateRiskScore = (
     finalScore = Math.max(0, finalScore - 3);
   }
 
-  // 确定风险类型
-  let riskType = 'conservative';
-  for (const [type, profile] of Object.entries(riskProfiles)) {
+  // 确定最终风险类型
+  let finalRiskType: RiskProfileType = 'conservative';
+  for (const type in riskProfiles) {
+    const profile = riskProfiles[type as RiskProfileType];
     const scoreRange = profile[language].scoreRange;
     if (finalScore >= scoreRange[0] && finalScore <= scoreRange[1]) {
-      riskType = type;
+      finalRiskType = type as RiskProfileType;
       break;
     }
   }
 
+  // 获取对应语言的描述和建议
+  const profileDetails = riskProfiles[finalRiskType][language];
+
+  // 返回符合 RiskAssessmentResult 接口的对象 (从 src/types/index.ts)
   return {
     score: Math.round(finalScore),
-    name: riskProfiles[riskType][language].name,
-    description: riskProfiles[riskType][language].description,
-    recommendation: riskProfiles[riskType][language].recommendation,
-    type: riskType,
-    needsVerification, // 添加标记，指示是否需要进一步验证
-    needsWarning // 添加标记，指示是否需要显示风险警告
+    name: profileDetails.name as string, // 使用类型断言
+    description: profileDetails.description as string, // 使用类型断言
+    recommendation: profileDetails.recommendation as string, // 使用类型断言
+    type: finalRiskType, // 类型为 RiskProfileType
   };
 };
 

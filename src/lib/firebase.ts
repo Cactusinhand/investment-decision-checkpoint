@@ -43,4 +43,10 @@ export const signInWithGitHub = async () => {
   }
 };
 
-export const logOut = () => signOut(auth);
+export const logOut = async () => {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error("Error during sign-out:", error);
+  }
+};

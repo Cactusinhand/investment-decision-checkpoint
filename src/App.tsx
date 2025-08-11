@@ -88,17 +88,19 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
+        // TODO: Fetch the full user profile from a persistent store (e.g., Firestore)
+        // using `firebaseUser.uid` to avoid overwriting existing user data.
+        // For now, it resets the profile on each login.
         setUser({
           id: firebaseUser.uid,
           name: firebaseUser.displayName || firebaseUser.email || 'User',
           riskTolerance: 'steady',
           preferredStrategies: [],
         });
-        setIsLoggedIn(true);
       } else {
         setUser(null);
-        setIsLoggedIn(false);
       }
+      setIsLoggedIn(!!firebaseUser);
     });
     return () => unsubscribe();
   }, []);

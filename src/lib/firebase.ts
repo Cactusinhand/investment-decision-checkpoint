@@ -21,16 +21,26 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 export const signInWithGoogle = async () => {
-  const provider = new GoogleAuthProvider();
-  const result = await signInWithPopup(auth, provider);
-  return result.user;
+  try {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (error) {
+    console.error("Error during Google sign-in:", error);
+    return null;
+  }
 };
 
 export const signInWithGitHub = async () => {
-  const provider = new GithubAuthProvider();
-  provider.addScope('user:email');
-  const result = await signInWithPopup(auth, provider);
-  return result.user;
+  try {
+    const provider = new GithubAuthProvider();
+    provider.addScope('user:email');
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (error) {
+    console.error("Error during GitHub sign-in:", error);
+    return null;
+  }
 };
 
 export const logOut = () => signOut(auth);

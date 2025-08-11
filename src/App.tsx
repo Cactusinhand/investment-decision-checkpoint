@@ -1,7 +1,6 @@
 /** @jsxImportSource react */
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from './components/ui/button';
-import { Input } from './components/ui/input';
 import {
   Card,
   CardContent,
@@ -30,6 +29,8 @@ import { InvestmentCheckpoint, rawQuestions, questionTranslations, optionToTrans
 import { InvestmentEvaluation } from './components/investment-evaluation';
 import { InvestmentDecision, RiskAssessmentResult, UserProfile, Question, EvaluationResult } from './types';
 import { translations } from './constants/index';
+import { signInWithGoogle, signInWithGitHub, logOut, auth } from './lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const deepSeekApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY || ''; // 或者 process.env.VITE_DEEPSEEK_API_KEY
 
@@ -48,13 +49,8 @@ const saveData = async (data: any) => {
 
 const App: React.FC = () => {
   // State Variables
-  /** User profile information. Replace initial value with actual login/profile loading logic. */
-  const [user, setUser] = useState<UserProfile | null>({
-    id: 'user123', // Example User ID
-    name: 'John Doe', // Example User Name
-    riskTolerance: '稳健型', // Example Risk Tolerance (Consider loading dynamically)
-    preferredStrategies: ['Value Investing', 'Growth Investing'], // Example Strategies
-  });
+  /** User profile information loaded from Firebase auth. */
+  const [user, setUser] = useState<UserProfile | null>(null);
   /** The currently active (being edited or viewed) investment decision. */
   const [currentDecision, setCurrentDecision] = useState<InvestmentDecision | null>(null);
   /** List of all investment decisions made by the user. Loaded from local storage. */
@@ -75,8 +71,8 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<'en' | 'zh'>('zh');
   /** Translated questions based on the selected language. */
   const [translatedQuestions, setTranslatedQuestions] = useState<{ [key: number]: Question[] }>(rawQuestions);
-  /** Authentication status (true if logged in, false otherwise). Should be replaced with actual auth state. */
-  const [isLoggedIn, setIsLoggedIn] = useState(true); // Simulate logged-in state
+  /** Authentication status (true if logged in, false otherwise). */
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   /** Controls the visibility of the Risk Assessment modal/component. */
   const [isRiskAssessmentOpen, setIsRiskAssessmentOpen] = useState(false);
   /** Stores the result from the completed risk assessment. */
@@ -87,6 +83,27 @@ const App: React.FC = () => {
   const [evaluatingDecision, setEvaluatingDecision] = useState<InvestmentDecision | null>(null);
   /** Stores the DeepSeek API key, loaded from environment variables. */
   const [apiKey, setApiKey] = useState<string>(deepSeekApiKey);
+
+  // Listen for Firebase authentication state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        // TODO: Fetch the full user profile from a persistent store (e.g., Firestore)
+        // using `firebaseUser.uid` to avoid overwriting existing user data.
+        // For now, it resets the profile on each login.
+        setUser({
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName || firebaseUser.email || 'User',
+          riskTolerance: 'steady',
+          preferredStrategies: [],
+        });
+      } else {
+        setUser(null);
+      }
+      setIsLoggedIn(!!firebaseUser);
+    });
+    return () => unsubscribe();
+  }, []);
   
   // Load decisions from local storage on initial load
   useEffect(() => {
@@ -306,15 +323,13 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logOut();
     // Clear user data and decisions
-    setUser(null);
     setDecisions([]);
     setCurrentDecision(null);
     setCurrentStage(1);
     localStorage.removeItem('investmentDecisions');
-    setIsLoggedIn(false); // Update login state
-    // Redirect to login page (if applicable)
   };
 
   // Render different content based on application state
@@ -333,50 +348,21 @@ const App: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="space-y-2">
-                <label
-                  htmlFor="email"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-gray-900 dark:text-white"
-                >
-                  {translations[language].email}
-                </label>
-                <Input
-                  id="email"
-                  placeholder={translations[language].email}
-                  className="dark:bg-gray-800 dark:text-white"
-                />
-              </div>
-              <div className="space-y-2">
-                <label
-                  htmlFor="password"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-gray-900 dark:text-white"
-                >
-                  {translations[language].password}
-                </label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder={translations[language].password}
-                  className="dark:bg-gray-800 dark:text-white"
-                />
-              </div>
+              <Button
+                className="w-full bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-700 dark:hover:bg-blue-800"
+                onClick={signInWithGoogle}
+              >
+                {translations[language].signInGoogle}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full text-gray-900 dark:text-white dark:bg-gray-700 dark:hover:bg-gray-600"
+                onClick={signInWithGitHub}
+              >
+                {translations[language].signInGitHub}
+              </Button>
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col sm:flex-row gap-2">
-            <Button
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-700 dark:hover:bg-blue-800"
-              onClick={() => setIsLoggedIn(true)} // Simulate login
-            >
-              {translations[language].login}
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full text-gray-900 dark:text-white dark:bg-gray-700 dark:hover:bg-gray-600"
-              onClick={() => setIsLoggedIn(true)} // Simulate registration
-            >
-              {translations[language].register}
-            </Button>
-          </CardFooter>
         </Card>
       </div>
     );

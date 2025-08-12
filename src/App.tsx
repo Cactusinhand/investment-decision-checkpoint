@@ -339,8 +339,13 @@ const App: React.FC = () => {
     try {
       const methods = await fetchSignInMethodsForEmail(auth, email);
       setSignInMethods(methods);
-    } catch (e) {
-      console.error('Failed to fetch sign-in methods', e);
+    } catch (error: any) {
+      const message =
+        (error.code && authErrorMessages[error.code]?.[language]) ||
+        error.message ||
+        translations[language].anErrorOccurred;
+      setError(message);
+      setSignInMethods([]);
     }
   };
 
@@ -410,10 +415,15 @@ const App: React.FC = () => {
     localStorage.removeItem('investmentDecisions');
   };
 
-  const providerMessage = signInMethods.includes('github.com')
-    ? `${translations[language].emailRegisteredWithGithub} ${translations[language].continueWithProvider.replace('{0}', 'GitHub')}`
-    : signInMethods.includes('google.com')
-    ? `${translations[language].emailRegisteredWithGoogle} ${translations[language].continueWithProvider.replace('{0}', 'Google')}`
+  const providerDetails = [
+    { id: 'github.com', name: 'GitHub', message: translations[language].emailRegisteredWithGithub },
+    { id: 'google.com', name: 'Google', message: translations[language].emailRegisteredWithGoogle },
+  ];
+
+  const foundProvider = providerDetails.find(p => signInMethods.includes(p.id));
+
+  const providerMessage = foundProvider
+    ? `${foundProvider.message} ${translations[language].continueWithProvider.replace('{0}', foundProvider.name)}`
     : '';
 
   return (

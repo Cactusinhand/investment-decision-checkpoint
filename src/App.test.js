@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react';
+import { translations } from './constants/index';
 
 jest.mock('./lib/firebase', () => ({
   signInWithGoogle: jest.fn(),
   signInWithGitHub: jest.fn(),
   registerWithEmail: jest.fn(),
+  signUpOrSignIn: jest.fn(),
   signInWithEmail: jest.fn(),
   logOut: jest.fn(),
   auth: {}

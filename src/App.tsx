@@ -34,7 +34,7 @@ import { translations } from './constants/index';
 import {
   signInWithGoogle,
   signInWithGitHub,
-  registerWithEmail,
+  signUpOrSignIn,
   signInWithEmail,
   logOut,
   auth,
@@ -445,7 +445,7 @@ const App: React.FC = () => {
               <div className="flex gap-2">
                 <Button
                   className="w-full bg-green-500 hover:bg-green-600 text-white dark:bg-green-700 dark:hover:bg-green-800"
-                  onClick={() => handleAuthAction(registerWithEmail)}
+                  onClick={() => handleAuthAction(signUpOrSignIn)}
                   disabled={isLoading}
                 >
                   {translations[language].register}

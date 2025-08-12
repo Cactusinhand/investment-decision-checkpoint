@@ -7,6 +7,7 @@ import {
   signOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
 } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -71,4 +72,28 @@ export const signInWithEmail = async (email: string, password: string) => {
     console.error('Error during email sign-in:', error);
     throw error;
   }
+};
+
+export const signUpOrSignIn = async (email: string, password: string) => {
+  const methods = await fetchSignInMethodsForEmail(auth, email);
+  if (methods.length === 0) {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    return result.user;
+  }
+  if (methods.includes('password')) {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    return result.user;
+  }
+  if (methods.includes('github.com')) {
+    const provider = new GithubAuthProvider();
+    provider.addScope('user:email');
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  }
+  if (methods.includes('google.com')) {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  }
+  throw new Error(`Unsupported sign-in methods: ${methods.join(', ')}`);
 };

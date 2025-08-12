@@ -39,6 +39,11 @@ import {
   logOut,
   auth,
 } from './lib/firebase';
+import {
+  saveRiskAssessment,
+  updateUserRiskTolerance,
+  loadLatestRiskAssessment,
+} from './lib/storage';
 import { onAuthStateChanged, fetchSignInMethodsForEmail, sendPasswordResetEmail } from 'firebase/auth';
 
 const deepSeekApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY || ''; // 或者 process.env.VITE_DEEPSEEK_API_KEY
@@ -118,20 +123,30 @@ const App: React.FC = () => {
 
   // Listen for Firebase authentication state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // TODO: Fetch the full user profile from a persistent store (e.g., Firestore)
-        // using `firebaseUser.uid` to avoid overwriting existing user data.
-        // For now, it resets the profile on each login.
-        setUser({
+        const baseProfile: UserProfile = {
           id: firebaseUser.uid,
           name: firebaseUser.displayName || firebaseUser.email || 'User',
           riskTolerance: 'steady',
           preferredStrategies: [],
-        });
+        };
+        setUser(baseProfile);
+
+        // 尝试加载最近的风险评估结果以填充用户信息
+        try {
+          const latest = await loadLatestRiskAssessment(firebaseUser.uid);
+          if (latest) {
+            setRiskAssessmentResult(latest);
+            setUser({ ...baseProfile, riskTolerance: latest.type });
+          }
+        } catch (err) {
+          console.error('Failed to load latest risk assessment:', err);
+        }
         setShowLogin(false);
       } else {
         setUser(null);
+        setRiskAssessmentResult(null);
       }
       setIsLoggedIn(!!firebaseUser);
     });
@@ -243,16 +258,28 @@ const App: React.FC = () => {
    * Updates the risk assessment result state and the user's profile risk tolerance.
    * @param result - The result object from the risk assessment.
    */
-  const handleRiskAssessmentComplete = (result: RiskAssessmentResult) => {
+  const handleRiskAssessmentComplete = async (result: RiskAssessmentResult) => {
     // 保存完整的风险评估结果
     setRiskAssessmentResult(result);
 
-    // 更新用户风险承受能力 - 使用 type 标识符
-    if (user) {
+    if (!user) return;
+
+    // 生成一个 assessmentId（使用时间戳以保持唯一性）
+    const assessmentId = new Date().toISOString();
+
+    try {
+      // 上传风险评估结果
+      await saveRiskAssessment(user.id, assessmentId, result);
+
+      // 更新用户风险承受能力 - 使用 type 标识符
+      await updateUserRiskTolerance(user.id, result.type);
+
       setUser({
         ...user,
-        riskTolerance: result.type // 使用与语言无关的 type
+        riskTolerance: result.type,
       });
+    } catch (err) {
+      console.error('Failed to save risk assessment:', err);
     }
   };
   

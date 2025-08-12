@@ -38,6 +38,7 @@ import {
   signInWithEmail,
   logOut,
   auth,
+  loadEvaluationResult,
 } from './lib/firebase';
 import { onAuthStateChanged, fetchSignInMethodsForEmail, sendPasswordResetEmail } from 'firebase/auth';
 
@@ -354,39 +355,64 @@ const App: React.FC = () => {
    * Sets the current decision, stage, and editing mode.
    * @param decisionId - Optional ID of an existing decision to load.
    */
-  const startNewDecision = useCallback((decisionId?: string) => {
-    if (!isLoggedIn) return; // Prevent if not logged in
+  const startNewDecision = useCallback(
+    async (decisionId?: string) => {
+      if (!isLoggedIn) return; // Prevent if not logged in
 
-    if (decisionId) {
-      // Load existing decision
-      const existingDecision = decisions.find((d) => d.id === decisionId);
-      if (existingDecision) {
-        setCurrentDecision(existingDecision);
-        setCurrentStage(existingDecision.stage);
-        // 如果决策已评估，则设置为只读模式（通过isEditing=false表示）
-        // 否则设置为编辑模式（通过isEditing=true表示）
-        setIsEditing(!existingDecision.evaluated);
+      if (decisionId) {
+        // Load existing decision
+        const existingDecision = decisions.find((d) => d.id === decisionId);
+        if (existingDecision) {
+          setCurrentDecision(existingDecision);
+          setCurrentStage(existingDecision.stage);
+          // 如果决策已评估，则设置为只读模式（通过isEditing=false表示）
+          // 否则设置为编辑模式（通过isEditing=true表示）
+          setIsEditing(!existingDecision.evaluated);
+
+          // 检查是否已有远程评估结果
+          if (user) {
+            try {
+              const remoteResult = await loadEvaluationResult(user.id, decisionId);
+              if (remoteResult) {
+                const updatedDecision: InvestmentDecision = {
+                  ...existingDecision,
+                  evaluated: true,
+                  evaluationScore: remoteResult.totalScore,
+                  evaluationResult: remoteResult,
+                };
+                setCurrentDecision(updatedDecision);
+                setDecisions((prev) =>
+                  prev.map((d) => (d.id === decisionId ? updatedDecision : d))
+                );
+                setIsEditing(false);
+              }
+            } catch (err) {
+              console.error('Failed to load evaluation result:', err);
+            }
+          }
+        } else {
+          setError(translations[language].decisionNotFound); // Set Error
+          setCurrentDecision(null);
+          setCurrentStage(1);
+          setIsEditing(false);
+        }
       } else {
-        setError(translations[language].decisionNotFound); // Set Error
-        setCurrentDecision(null);
+        // Create a new decision
+        const newDecision: InvestmentDecision = {
+          id: `decision-${Date.now()}`, // Unique ID
+          name: '',
+          stage: 1,
+          answers: {},
+          completed: false,
+        };
+        setCurrentDecision(newDecision);
         setCurrentStage(1);
         setIsEditing(false);
       }
-    } else {
-      // Create a new decision
-      const newDecision: InvestmentDecision = {
-        id: `decision-${Date.now()}`, // Unique ID
-        name: '',
-        stage: 1,
-        answers: {},
-        completed: false,
-      };
-      setCurrentDecision(newDecision);
-      setCurrentStage(1);
-      setIsEditing(false);
-    }
-    setError(null); // Clear any previous errors
-  }, [decisions, language, isLoggedIn]);
+      setError(null); // Clear any previous errors
+    },
+    [decisions, language, isLoggedIn, user]
+  );
 
   // 取消当前决策编辑过程
   const cancelDecision = () => {

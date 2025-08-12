@@ -10,7 +10,6 @@ import {
 import { Button } from '../../ui/button';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { 
-  InvestmentDecision, 
   InvestmentEvaluationProps,
   EvaluationState,
   EvaluationStep,
@@ -25,6 +24,7 @@ import { validateAllAnswerTypes } from '../utils/typeValidation';
 import EvaluationProcess from './EvaluationProcess';
 import EvaluationResultDisplay from './EvaluationResult';
 import { rawQuestions } from '../../investment-checkpoint/constants';
+import { auth, uploadEvaluationResult } from '../../../lib/firebase';
 
 /**
  * InvestmentEvaluation Component
@@ -179,17 +179,19 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
    * Currently, it just calls the onComplete callback passed via props.
    * In a real app, this might involve saving the result back to a central store or backend.
    */
-  const handleSaveResult = () => {
+  const handleSaveResult = async () => {
     if (!result) return;
-    
-    // 创建已评估的决策
-    const evaluatedDecision: InvestmentDecision = {
-      ...decision,
-      evaluated: true,
-      evaluationScore: result.totalScore,
-      evaluationResult: result
-    };
-    
+
+    // 上传评估结果到 Firebase Storage
+    try {
+      const uid = auth.currentUser?.uid;
+      if (uid) {
+        await uploadEvaluationResult(uid, decision.id, result);
+      }
+    } catch (err) {
+      console.error('Failed to upload evaluation result:', err);
+    }
+
     // 调用完成回调
     onComplete(result);
   };

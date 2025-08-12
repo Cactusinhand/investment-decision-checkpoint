@@ -9,6 +9,13 @@ import {
   signInWithEmailAndPassword,
   fetchSignInMethodsForEmail,
 } from 'firebase/auth';
+import {
+  getStorage,
+  ref,
+  uploadString,
+  getDownloadURL,
+} from 'firebase/storage';
+import { EvaluationResult } from '../types';
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -22,6 +29,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+const storage = getStorage(app);
 
 export const signInWithGoogle = async () => {
   try {
@@ -104,5 +112,43 @@ export const signUpOrSignIn = async (email: string, password: string) => {
   } catch (error) {
     console.error('Error during sign up or sign in:', error);
     throw error;
+  }
+};
+
+/**
+ * Upload an evaluation result for a decision to Firebase Storage.
+ * The result is stored as JSON at `decisionEvaluations/{uid}/{decisionId}.json`.
+ */
+export const uploadEvaluationResult = async (
+  uid: string,
+  decisionId: string,
+  result: EvaluationResult
+) => {
+  const fileRef = ref(storage, `decisionEvaluations/${uid}/${decisionId}.json`);
+  await uploadString(fileRef, JSON.stringify(result), 'raw', {
+    contentType: 'application/json',
+  });
+};
+
+/**
+ * Load an evaluation result for a decision from Firebase Storage.
+ * Returns `null` if no stored result exists.
+ */
+export const loadEvaluationResult = async (
+  uid: string,
+  decisionId: string
+): Promise<EvaluationResult | null> => {
+  try {
+    const fileRef = ref(storage, `decisionEvaluations/${uid}/${decisionId}.json`);
+    const url = await getDownloadURL(fileRef);
+    const response = await fetch(url);
+    const data = await response.json();
+    return data as EvaluationResult;
+  } catch (error: any) {
+    if (error?.code === 'storage/object-not-found') {
+      return null;
+    }
+    console.error('Error loading evaluation result:', error);
+    return null;
   }
 };

@@ -59,7 +59,7 @@ export const registerWithEmail = async (email: string, password: string) => {
     return result.user;
   } catch (error) {
     console.error('Error during email registration:', error);
-    return null;
+    throw error;
   }
 };
 

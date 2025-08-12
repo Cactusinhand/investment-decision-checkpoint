@@ -379,7 +379,7 @@ const App: React.FC = () => {
                 <LogOut className="h-5 w-5" />
               </Button>
             ) : (
-              <Button onClick={() => setShowLogin(true)}>
+              <Button onClick={() => setShowLogin(true)} data-testid="login-button">
                 {translations[language].login}
               </Button>
             )}

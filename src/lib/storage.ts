@@ -20,7 +20,7 @@ export async function downloadJson<T = unknown>(path: string): Promise<T> {
     const url = await getDownloadURL(storageRef);
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
+      throw new Error(`HTTP error ${response.status} ${response.statusText}`);
     }
     return (await response.json()) as T;
   } catch (error) {

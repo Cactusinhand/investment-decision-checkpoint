@@ -5,6 +5,8 @@ import {
   GithubAuthProvider,
   signInWithPopup,
   signOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
 } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -48,5 +50,25 @@ export const logOut = async () => {
     await signOut(auth);
   } catch (error) {
     console.error("Error during sign-out:", error);
+  }
+};
+
+export const registerWithEmail = async (email: string, password: string) => {
+  try {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    return result.user;
+  } catch (error) {
+    console.error('Error during email registration:', error);
+    return null;
+  }
+};
+
+export const signInWithEmail = async (email: string, password: string) => {
+  try {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    return result.user;
+  } catch (error) {
+    console.error('Error during email sign-in:', error);
+    return null;
   }
 };

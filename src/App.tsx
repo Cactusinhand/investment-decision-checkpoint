@@ -279,6 +279,25 @@ const App: React.FC = () => {
     setIsInvestmentEvaluationOpen(true);
   };
 
+  const handleAuthAction = async (authFunction: (email: string, password: string) => Promise<any>) => {
+    if (!email || !password) {
+      setError(translations[language].enterCredentials);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      await authFunction(email, password);
+      // `onAuthStateChanged` will handle successful login/registration, closing the dialog.
+    } catch (error: any) {
+      // Firebase provides specific error codes (e.g., error.code) which you could
+      // map to user-friendly translated messages for a better UX.
+      setError(error.message || translations[language].anErrorOccurred);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   /** 
    * Initializes a new investment decision process or loads an existing one for editing/viewing.
    * Sets the current decision, stage, and editing mode.
@@ -426,13 +445,15 @@ const App: React.FC = () => {
               <div className="flex gap-2">
                 <Button
                   className="w-full bg-green-500 hover:bg-green-600 text-white dark:bg-green-700 dark:hover:bg-green-800"
-                  onClick={() => registerWithEmail(email, password)}
+                  onClick={() => handleAuthAction(registerWithEmail)}
+                  disabled={isLoading}
                 >
                   {translations[language].register}
                 </Button>
                 <Button
                   className="w-full bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-700 dark:hover:bg-blue-800"
-                  onClick={() => signInWithEmail(email, password)}
+                  onClick={() => handleAuthAction(signInWithEmail)}
+                  disabled={isLoading}
                 >
                   {translations[language].login}
                 </Button>

@@ -20,6 +20,6 @@ test('shows login button and reminder when not authenticated', () => {
   render(<App />);
   const buttonElement = screen.getByTestId('login-button');
   expect(buttonElement).toBeInTheDocument();
-  const reminder = screen.getByText('请先登录以继续操作。');
+  const reminder = screen.getByText(translations.zh.loginReminder);
   expect(reminder).toBeInTheDocument();
 });

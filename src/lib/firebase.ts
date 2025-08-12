@@ -75,25 +75,34 @@ export const signInWithEmail = async (email: string, password: string) => {
 };
 
 export const signUpOrSignIn = async (email: string, password: string) => {
-  const methods = await fetchSignInMethodsForEmail(auth, email);
-  if (methods.length === 0) {
-    const result = await createUserWithEmailAndPassword(auth, email, password);
-    return result.user;
+  try {
+    const methods = await fetchSignInMethodsForEmail(auth, email);
+
+    if (methods.length === 0) {
+      // New user, create an account
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      return result.user;
+    }
+
+    if (methods.includes('password')) {
+      // Existing user with password, sign them in
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      return result.user;
+    }
+
+    // If email is associated with a social provider, inform the user.
+    if (methods.includes('google.com')) {
+      throw new Error('This email is already associated with a Google account. Please sign in with Google.');
+    }
+
+    if (methods.includes('github.com')) {
+      throw new Error('This email is already associated with a GitHub account. Please sign in with GitHub.');
+    }
+
+    // Fallback for other unhandled methods
+    throw new Error(`Unsupported sign-in methods for this email: ${methods.join(', ')}`);
+  } catch (error) {
+    console.error('Error during sign up or sign in:', error);
+    throw error;
   }
-  if (methods.includes('password')) {
-    const result = await signInWithEmailAndPassword(auth, email, password);
-    return result.user;
-  }
-  if (methods.includes('github.com')) {
-    const provider = new GithubAuthProvider();
-    provider.addScope('user:email');
-    const result = await signInWithPopup(auth, provider);
-    return result.user;
-  }
-  if (methods.includes('google.com')) {
-    const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(auth, provider);
-    return result.user;
-  }
-  throw new Error(`Unsupported sign-in methods: ${methods.join(', ')}`);
 };

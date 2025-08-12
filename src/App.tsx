@@ -40,6 +40,7 @@ import {
   auth,
 } from './lib/firebase';
 import { onAuthStateChanged, fetchSignInMethodsForEmail, sendPasswordResetEmail } from 'firebase/auth';
+import { loadJsonDir, writeJson, deleteFile } from './lib/storage';
 
 const deepSeekApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY || ''; // 或者 process.env.VITE_DEEPSEEK_API_KEY
 
@@ -81,7 +82,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   /** The currently active (being edited or viewed) investment decision. */
   const [currentDecision, setCurrentDecision] = useState<InvestmentDecision | null>(null);
-  /** List of all investment decisions made by the user. Loaded from local storage. */
+  /** List of all investment decisions made by the user. Loaded from storage. */
   const [decisions, setDecisions] = useState<InvestmentDecision[]>([]);
   /** The current stage (1-7) of the investment checkpoint being displayed. */
   const [currentStage, setCurrentStage] = useState(1);
@@ -130,35 +131,19 @@ const App: React.FC = () => {
           preferredStrategies: [],
         });
         setShowLogin(false);
+
+        // Load any previously saved decisions for this user from storage
+        loadJsonDir(`investmentDecisions/${firebaseUser.uid}`).then((loaded) => {
+          setDecisions(loaded as InvestmentDecision[]);
+        });
       } else {
         setUser(null);
+        setDecisions([]);
       }
       setIsLoggedIn(!!firebaseUser);
     });
     return () => unsubscribe();
   }, []);
-  
-  // Load decisions from local storage on initial load
-  useEffect(() => {
-    const savedDecisions = localStorage.getItem('investmentDecisions');
-    if (savedDecisions) {
-      try {
-        setDecisions(JSON.parse(savedDecisions));
-      } catch (e) {
-        console.error("Failed to parse saved decisions:", e);
-        // Handle the error, e.g., clear the corrupted data
-        localStorage.removeItem('investmentDecisions');
-        setDecisions([]); // Reset to an empty array
-      }
-    }
-  }, []);
-
-  // Save decisions to local storage whenever they change
-  useEffect(() => {
-    if (decisions.length > 0 || localStorage.getItem('investmentDecisions')) {
-      localStorage.setItem('investmentDecisions', JSON.stringify(decisions));
-    }
-  }, [decisions]);
 
   // Apply theme
   useEffect(() => {
@@ -273,9 +258,16 @@ const App: React.FC = () => {
     };
     
     // 更新决策列表
-    setDecisions(decisions.map(d => 
+    setDecisions(decisions.map(d =>
       d.id === updatedDecision.id ? updatedDecision : d
     ));
+
+    if (user) {
+      writeJson(
+        `investmentDecisions/${user.id}/${updatedDecision.id}`,
+        updatedDecision
+      );
+    }
     
     // 关闭评估模态框
     setIsInvestmentEvaluationOpen(false);
@@ -404,6 +396,9 @@ const App: React.FC = () => {
       setCurrentDecision(null);
       setCurrentStage(1);
     }
+    if (user) {
+      deleteFile(`investmentDecisions/${user.id}/${decisionId}`);
+    }
   };
 
   const handleLogout = async () => {
@@ -412,7 +407,6 @@ const App: React.FC = () => {
     setDecisions([]);
     setCurrentDecision(null);
     setCurrentStage(1);
-    localStorage.removeItem('investmentDecisions');
   };
 
   const providerDetails = [
@@ -786,6 +780,14 @@ const App: React.FC = () => {
                         } else {
                           setDecisions([...decisions, decision]);
                         }
+
+                        if (user) {
+                          await writeJson(
+                            `investmentDecisions/${user.id}/${decision.id}`,
+                            decision
+                          );
+                        }
+
                         setCurrentDecision(null);
                         setCurrentStage(1);
                         setIsEditing(false);

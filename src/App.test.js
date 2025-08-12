@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { translations } from './constants';
 
 jest.mock('./lib/firebase', () => ({
   signInWithGoogle: jest.fn(),

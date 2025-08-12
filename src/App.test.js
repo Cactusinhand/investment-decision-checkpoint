@@ -16,8 +16,10 @@ jest.mock('firebase/auth', () => ({
 
 import App from './App';
 
-test('shows login button when not authenticated', () => {
+test('shows login button and reminder when not authenticated', () => {
   render(<App />);
-  const buttonElement = screen.getByText(/登录/);
+  const buttonElement = screen.getByTestId('login-button');
   expect(buttonElement).toBeInTheDocument();
+  const reminder = screen.getByText('请先登录以继续操作。');
+  expect(reminder).toBeInTheDocument();
 });

@@ -419,6 +419,11 @@ const App: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="container mx-auto px-4 py-8">
+        {!isLoggedIn && (
+          <div className="mb-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded" role="alert">
+            {translations[language].loginReminder}
+          </div>
+        )}
         {error && (
           <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded relative" role="alert">
             <strong className="font-bold">{translations[language].error}: </strong>

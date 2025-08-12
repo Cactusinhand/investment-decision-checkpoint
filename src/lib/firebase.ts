@@ -7,6 +7,7 @@ import {
   signOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
 } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -69,6 +70,39 @@ export const signInWithEmail = async (email: string, password: string) => {
     return result.user;
   } catch (error) {
     console.error('Error during email sign-in:', error);
+    throw error;
+  }
+};
+
+export const signUpOrSignIn = async (email: string, password: string) => {
+  try {
+    const methods = await fetchSignInMethodsForEmail(auth, email);
+
+    if (methods.length === 0) {
+      // New user, create an account
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      return result.user;
+    }
+
+    if (methods.includes('password')) {
+      // Existing user with password, sign them in
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      return result.user;
+    }
+
+    // If email is associated with a social provider, inform the user.
+    if (methods.includes('google.com')) {
+      throw new Error('This email is already associated with a Google account. Please sign in with Google.');
+    }
+
+    if (methods.includes('github.com')) {
+      throw new Error('This email is already associated with a GitHub account. Please sign in with GitHub.');
+    }
+
+    // Fallback for other unhandled methods
+    throw new Error(`Unsupported sign-in methods for this email: ${methods.join(', ')}`);
+  } catch (error) {
+    console.error('Error during sign up or sign in:', error);
     throw error;
   }
 };

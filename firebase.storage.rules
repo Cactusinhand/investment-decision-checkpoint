@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthorized(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    function isValidJsonUpload() {
+      return request.resource != null &&
+             request.resource.contentType.matches('application/json') &&
+             request.resource.size < 1 * 1024 * 1024;
+    }
+    function isValidJsonResource() {
+      return resource != null &&
+             resource.contentType.matches('application/json') &&
+             resource.size < 1 * 1024 * 1024;
+    }
+
+    match /userProfiles/{userId}/{file} {
+      allow read: if isAuthorized(userId) && isValidJsonResource();
+      allow write: if isAuthorized(userId) && isValidJsonUpload();
+    }
+
+    match /investmentDecisions/{userId}/{decisionId} {
+      allow read: if isAuthorized(userId) && isValidJsonResource();
+      allow write: if isAuthorized(userId) && isValidJsonUpload();
+    }
+
+    match /riskAssessments/{userId}/{assessmentId} {
+      allow read: if isAuthorized(userId) && isValidJsonResource();
+      allow write: if isAuthorized(userId) && isValidJsonUpload();
+    }
+
+    match /decisionEvaluations/{userId}/{decisionId} {
+      allow read: if isAuthorized(userId) && isValidJsonResource();
+      allow write: if isAuthorized(userId) && isValidJsonUpload();
+    }
+  }
+}

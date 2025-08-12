@@ -131,3 +131,13 @@ To enable the AI-enhanced analysis features powered by the DeepSeek API, you nee
 3.  **Deploy/Redeploy:** Trigger a new deployment on Vercel. Vercel will automatically inject the environment variable during the build process and make it available to your application at runtime (`process.env.REACT_APP_DEEPSEEK_API_KEY`).
 
 **Note:** Exposing API keys directly to the frontend (even via environment variables with prefixes) carries some security risks. For production applications requiring higher security, consider implementing a backend proxy or serverless function on Vercel to handle API calls, keeping the key securely on the server-side.
+
+### Firebase Storage Rules Deployment
+
+Storage security rules live in `firebase.storage.rules`. To publish any updates, use the Firebase CLI:
+
+```bash
+firebase deploy --only storage
+```
+
+This command deploys only the storage rules to your Firebase project.

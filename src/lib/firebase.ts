@@ -149,6 +149,6 @@ export const loadEvaluationResult = async (
       return null;
     }
     console.error('Error loading evaluation result:', error);
-    return null;
+    throw error;
   }
 };

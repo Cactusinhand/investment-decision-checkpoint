@@ -39,7 +39,7 @@ import {
   logOut,
   auth,
 } from './lib/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, fetchSignInMethodsForEmail, sendPasswordResetEmail } from 'firebase/auth';
 
 const deepSeekApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY || ''; // 或者 process.env.VITE_DEEPSEEK_API_KEY
 
@@ -54,6 +54,25 @@ const saveData = async (data: any) => {
   // In a real app, you'd send this data to your backend
   console.log('Saving data:', data);
   return { success: true, data }; // Return a success/failure indicator
+};
+
+const authErrorMessages: Record<string, { en: string; zh: string }> = {
+  'auth/invalid-email': {
+    en: 'Invalid email address.',
+    zh: '无效的电子邮件地址。',
+  },
+  'auth/user-not-found': {
+    en: 'User not found.',
+    zh: '用户不存在。',
+  },
+  'auth/wrong-password': {
+    en: 'Incorrect password.',
+    zh: '密码错误。',
+  },
+  'auth/email-already-in-use': {
+    en: 'Email already in use.',
+    zh: '电子邮件已被使用。',
+  },
 };
 
 const App: React.FC = () => {
@@ -85,6 +104,7 @@ const App: React.FC = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [signInMethods, setSignInMethods] = useState<string[]>([]);
   /** Controls the visibility of the Risk Assessment modal/component. */
   const [isRiskAssessmentOpen, setIsRiskAssessmentOpen] = useState(false);
   /** Stores the result from the completed risk assessment. */
@@ -290,11 +310,42 @@ const App: React.FC = () => {
       await authFunction(email, password);
       // `onAuthStateChanged` will handle successful login/registration, closing the dialog.
     } catch (error: any) {
-      // Firebase provides specific error codes (e.g., error.code) which you could
-      // map to user-friendly translated messages for a better UX.
-      setError(error.message || translations[language].anErrorOccurred);
+      const message =
+        (error.code && authErrorMessages[error.code]?.[language]) ||
+        error.message ||
+        translations[language].anErrorOccurred;
+      setError(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!email) return;
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setError(translations[language].resetEmailSent);
+    } catch (error: any) {
+      const message =
+        (error.code && authErrorMessages[error.code]?.[language]) ||
+        error.message ||
+        translations[language].anErrorOccurred;
+      setError(message);
+    }
+  };
+
+  const handleEmailBlur = async () => {
+    if (!email) return;
+    try {
+      const methods = await fetchSignInMethodsForEmail(auth, email);
+      setSignInMethods(methods);
+    } catch (error: any) {
+      const message =
+        (error.code && authErrorMessages[error.code]?.[language]) ||
+        error.message ||
+        translations[language].anErrorOccurred;
+      setError(message);
+      setSignInMethods([]);
     }
   };
 
@@ -364,6 +415,17 @@ const App: React.FC = () => {
     localStorage.removeItem('investmentDecisions');
   };
 
+  const providerDetails = [
+    { id: 'github.com', name: 'GitHub', message: translations[language].emailRegisteredWithGithub },
+    { id: 'google.com', name: 'Google', message: translations[language].emailRegisteredWithGoogle },
+  ];
+
+  const foundProvider = providerDetails.find(p => signInMethods.includes(p.id));
+
+  const providerMessage = foundProvider
+    ? `${foundProvider.message} ${translations[language].continueWithProvider.replace('{0}', foundProvider.name)}`
+    : '';
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Top Navigation Bar */}
@@ -427,12 +489,18 @@ const App: React.FC = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {providerMessage && (
+              <div className="mb-4 p-2 text-sm bg-blue-100 border border-blue-400 text-blue-700 rounded">
+                {providerMessage}
+              </div>
+            )}
             <div className="space-y-4">
               <Input
                 type="email"
                 placeholder={translations[language].email}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onBlur={handleEmailBlur}
                 className="text-gray-900 dark:text-white dark:bg-gray-700"
               />
               <Input
@@ -442,6 +510,11 @@ const App: React.FC = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 className="text-gray-900 dark:text-white dark:bg-gray-700"
               />
+              {signInMethods.includes('password') && (
+                <Button variant="link" className="p-0" onClick={handlePasswordReset}>
+                  {translations[language].forgotPassword}
+                </Button>
+              )}
               <div className="flex gap-2">
                 <Button
                   className="w-full bg-green-500 hover:bg-green-600 text-white dark:bg-green-700 dark:hover:bg-green-800"

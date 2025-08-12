@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from './components/ui/card';
+import { Dialog } from './components/ui/dialog';
 import {
   CheckCircle,
   ChevronRight,
@@ -73,6 +74,7 @@ const App: React.FC = () => {
   const [translatedQuestions, setTranslatedQuestions] = useState<{ [key: number]: Question[] }>(rawQuestions);
   /** Authentication status (true if logged in, false otherwise). */
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
   /** Controls the visibility of the Risk Assessment modal/component. */
   const [isRiskAssessmentOpen, setIsRiskAssessmentOpen] = useState(false);
   /** Stores the result from the completed risk assessment. */
@@ -97,6 +99,7 @@ const App: React.FC = () => {
           riskTolerance: 'steady',
           preferredStrategies: [],
         });
+        setShowLogin(false);
       } else {
         setUser(null);
       }
@@ -332,11 +335,59 @@ const App: React.FC = () => {
     localStorage.removeItem('investmentDecisions');
   };
 
-  // Render different content based on application state
-  if (!isLoggedIn) {
-    // Render login/registration page (simplified for this example)
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
+  return (
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Top Navigation Bar */}
+      <nav className="bg-white dark:bg-gray-800 shadow-md py-4">
+        <div className="container mx-auto flex justify-between items-center px-4">
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-6 w-6 text-blue-500 dark:text-blue-400" />
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+              {translations[language].appName}
+            </h1>
+          </div>
+          <div className="flex items-center gap-4">
+            {isLoggedIn && (
+              <span className="text-gray-600 dark:text-gray-300">
+                {translations[language].welcome}, {user?.name}
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+              className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+              title={theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+            >
+              {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')}
+              className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+              title={language === 'en' ? '中文' : 'English'}
+            >
+              <Globe className="h-5 w-5" />
+            </Button>
+            {isLoggedIn ? (
+              <Button
+                variant="ghost"
+                onClick={handleLogout}
+                className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
+            ) : (
+              <Button onClick={() => setShowLogin(true)} data-testid="login-button">
+                {translations[language].login}
+              </Button>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      <Dialog open={showLogin} onOpenChange={setShowLogin}>
         <Card className="w-[350px] shadow-lg dark:bg-gray-900 dark:border-gray-700">
           <CardHeader>
             <CardTitle className="text-gray-900 dark:text-white">
@@ -364,53 +415,7 @@ const App: React.FC = () => {
             </div>
           </CardContent>
         </Card>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Top Navigation Bar */}
-      <nav className="bg-white dark:bg-gray-800 shadow-md py-4">
-        <div className="container mx-auto flex justify-between items-center px-4">
-          <div className="flex items-center gap-2">
-            <BookOpen className="h-6 w-6 text-blue-500 dark:text-blue-400" />
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-              {translations[language].appName}
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-600 dark:text-gray-300">
-              {translations[language].welcome}, {user?.name}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-              className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
-              title={theme === 'light' ? 'Dark Mode' : 'Light Mode'}
-            >
-              {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')}
-              className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
-              title={language === 'en' ? '中文' : 'English'}
-            >
-              <Globe className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={handleLogout}
-              className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
-            >
-              <LogOut className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-      </nav>
+      </Dialog>
 
       {/* Main Content Area */}
       <div className="container mx-auto px-4 py-8">

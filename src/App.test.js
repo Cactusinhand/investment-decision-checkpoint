@@ -1,8 +1,23 @@
 import { render, screen } from '@testing-library/react';
+
+jest.mock('./lib/firebase', () => ({
+  signInWithGoogle: jest.fn(),
+  signInWithGitHub: jest.fn(),
+  logOut: jest.fn(),
+  auth: {}
+}));
+
+jest.mock('firebase/auth', () => ({
+  onAuthStateChanged: (_auth, callback) => {
+    callback(null);
+    return () => {};
+  }
+}));
+
 import App from './App';
 
-test('renders learn react link', () => {
+test('shows login button when not authenticated', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  const buttonElement = screen.getByText(/登录/);
+  expect(buttonElement).toBeInTheDocument();
 });

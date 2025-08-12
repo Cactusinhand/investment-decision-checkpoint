@@ -69,6 +69,6 @@ export const signInWithEmail = async (email: string, password: string) => {
     return result.user;
   } catch (error) {
     console.error('Error during email sign-in:', error);
-    return null;
+    throw error;
   }
 };

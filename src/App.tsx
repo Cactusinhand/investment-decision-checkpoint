@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from './components/ui/button';
+import { Input } from './components/ui/input';
 import {
   Card,
   CardContent,
@@ -30,7 +31,14 @@ import { InvestmentCheckpoint, rawQuestions, questionTranslations, optionToTrans
 import { InvestmentEvaluation } from './components/investment-evaluation';
 import { InvestmentDecision, RiskAssessmentResult, UserProfile, Question, EvaluationResult } from './types';
 import { translations } from './constants/index';
-import { signInWithGoogle, signInWithGitHub, logOut, auth } from './lib/firebase';
+import {
+  signInWithGoogle,
+  signInWithGitHub,
+  registerWithEmail,
+  signInWithEmail,
+  logOut,
+  auth,
+} from './lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
 const deepSeekApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY || ''; // 或者 process.env.VITE_DEEPSEEK_API_KEY
@@ -75,6 +83,8 @@ const App: React.FC = () => {
   /** Authentication status (true if logged in, false otherwise). */
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   /** Controls the visibility of the Risk Assessment modal/component. */
   const [isRiskAssessmentOpen, setIsRiskAssessmentOpen] = useState(false);
   /** Stores the result from the completed risk assessment. */
@@ -269,6 +279,25 @@ const App: React.FC = () => {
     setIsInvestmentEvaluationOpen(true);
   };
 
+  const handleAuthAction = async (authFunction: (email: string, password: string) => Promise<any>) => {
+    if (!email || !password) {
+      setError(translations[language].enterCredentials);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      await authFunction(email, password);
+      // `onAuthStateChanged` will handle successful login/registration, closing the dialog.
+    } catch (error: any) {
+      // Firebase provides specific error codes (e.g., error.code) which you could
+      // map to user-friendly translated messages for a better UX.
+      setError(error.message || translations[language].anErrorOccurred);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   /** 
    * Initializes a new investment decision process or loads an existing one for editing/viewing.
    * Sets the current decision, stage, and editing mode.
@@ -399,6 +428,36 @@ const App: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              <Input
+                type="email"
+                placeholder={translations[language].email}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="text-gray-900 dark:text-white dark:bg-gray-700"
+              />
+              <Input
+                type="password"
+                placeholder={translations[language].password}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="text-gray-900 dark:text-white dark:bg-gray-700"
+              />
+              <div className="flex gap-2">
+                <Button
+                  className="w-full bg-green-500 hover:bg-green-600 text-white dark:bg-green-700 dark:hover:bg-green-800"
+                  onClick={() => handleAuthAction(registerWithEmail)}
+                  disabled={isLoading}
+                >
+                  {translations[language].register}
+                </Button>
+                <Button
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-700 dark:hover:bg-blue-800"
+                  onClick={() => handleAuthAction(signInWithEmail)}
+                  disabled={isLoading}
+                >
+                  {translations[language].login}
+                </Button>
+              </div>
               <Button
                 className="w-full bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-700 dark:hover:bg-blue-800"
                 onClick={signInWithGoogle}

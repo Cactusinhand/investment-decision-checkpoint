@@ -19,7 +19,6 @@ jest.mock('firebase/auth', () => ({
 }));
 
 import App from './App';
-import { translations } from './constants';
 
 test('shows login button and reminder when not authenticated', () => {
   render(<App />);

@@ -39,6 +39,7 @@ import {
   logOut,
   auth,
 } from './lib/firebase';
+import { storageService } from './lib/storage';
 import { onAuthStateChanged, fetchSignInMethodsForEmail, sendPasswordResetEmail } from 'firebase/auth';
 
 const deepSeekApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY || ''; // 或者 process.env.VITE_DEEPSEEK_API_KEY
@@ -118,20 +119,61 @@ const App: React.FC = () => {
 
   // Listen for Firebase authentication state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // TODO: Fetch the full user profile from a persistent store (e.g., Firestore)
-        // using `firebaseUser.uid` to avoid overwriting existing user data.
-        // For now, it resets the profile on each login.
-        setUser({
-          id: firebaseUser.uid,
-          name: firebaseUser.displayName || firebaseUser.email || 'User',
-          riskTolerance: 'steady',
-          preferredStrategies: [],
-        });
+        const uid = firebaseUser.uid;
+        
+        // Load user profile from Firebase Storage
+        let userProfile = await storageService.loadUserProfile(uid);
+        
+        // If no profile exists, create one
+        if (!userProfile) {
+          userProfile = {
+            id: uid,
+            name: firebaseUser.displayName || firebaseUser.email || 'User',
+            riskTolerance: 'steady',
+            preferredStrategies: [],
+          };
+          await storageService.saveUserProfile(uid, userProfile);
+        }
+        
+        setUser(userProfile);
+        
+        // Load user's investment decisions from Firebase Storage
+        try {
+          const userDecisions = await storageService.loadAllInvestmentDecisions(uid);
+          setDecisions(userDecisions);
+        } catch (error) {
+          console.error('Error loading decisions from Firebase Storage:', error);
+          // Fallback to localStorage if Firebase fails
+          const savedDecisions = localStorage.getItem('investmentDecisions');
+          if (savedDecisions) {
+            try {
+              setDecisions(JSON.parse(savedDecisions));
+            } catch (e) {
+              console.error('Failed to parse saved decisions:', e);
+              setDecisions([]);
+            }
+          }
+        }
+        
+        // Load user's risk assessments from Firebase Storage
+        try {
+          const userRiskAssessments = await storageService.loadAllRiskAssessments(uid);
+          if (userRiskAssessments.length > 0) {
+            // Use the most recent risk assessment
+            const latestAssessment = userRiskAssessments[userRiskAssessments.length - 1];
+            setRiskAssessmentResult(latestAssessment);
+          }
+        } catch (error) {
+          console.error('Error loading risk assessments from Firebase Storage:', error);
+        }
+
+        
         setShowLogin(false);
       } else {
         setUser(null);
+        setDecisions([]);
       }
       setIsLoggedIn(!!firebaseUser);
     });
@@ -153,12 +195,25 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Save decisions to local storage whenever they change
+  // Save decisions to Firebase Storage whenever they change
   useEffect(() => {
-    if (decisions.length > 0 || localStorage.getItem('investmentDecisions')) {
-      localStorage.setItem('investmentDecisions', JSON.stringify(decisions));
-    }
-  }, [decisions]);
+    const saveDecisions = async () => {
+      if (user && decisions.length > 0) {
+        try {
+          // Save all decisions to Firebase Storage
+          for (const decision of decisions) {
+            await storageService.saveInvestmentDecision(user.id, decision);
+          }
+        } catch (error) {
+          console.error('Error saving decisions to Firebase Storage:', error);
+          // Fallback to localStorage
+          localStorage.setItem('investmentDecisions', JSON.stringify(decisions));
+        }
+      }
+    };
+    
+    saveDecisions();
+  }, [decisions, user]);
 
   // Apply theme
   useEffect(() => {
@@ -243,16 +298,28 @@ const App: React.FC = () => {
    * Updates the risk assessment result state and the user's profile risk tolerance.
    * @param result - The result object from the risk assessment.
    */
-  const handleRiskAssessmentComplete = (result: RiskAssessmentResult) => {
+  const handleRiskAssessmentComplete = async (result: RiskAssessmentResult) => {
     // 保存完整的风险评估结果
     setRiskAssessmentResult(result);
 
     // 更新用户风险承受能力 - 使用 type 标识符
     if (user) {
-      setUser({
+      const updatedUser = {
         ...user,
         riskTolerance: result.type // 使用与语言无关的 type
-      });
+      };
+      
+      // Save updated user profile to Firebase Storage
+      try {
+        await storageService.saveUserProfile(user.id, updatedUser);
+        setUser(updatedUser);
+        
+        // Save risk assessment result to Firebase Storage
+        await storageService.saveRiskAssessment(user.id, result);
+      } catch (error) {
+        console.error('Error saving user profile:', error);
+        setError(language === 'zh' ? '保存用户档案失败' : 'Failed to save user profile');
+      }
     }
   };
   
@@ -261,25 +328,34 @@ const App: React.FC = () => {
    * Updates the evaluated decision with the results and closes the evaluation modal.
    * @param result - The evaluation result object.
    */
-  const handleInvestmentEvaluationComplete = (result: EvaluationResult) => {
-    if (!evaluatingDecision) return;
+  const handleInvestmentEvaluationComplete = async (result: EvaluationResult) => {
+    if (!evaluatingDecision || !user) return;
     
-    // 更新决策的评估结果
-    const updatedDecision: InvestmentDecision = {
-      ...evaluatingDecision,
-      evaluated: true,
-      evaluationScore: result.totalScore,
-      evaluationResult: result
-    };
-    
-    // 更新决策列表
-    setDecisions(decisions.map(d => 
-      d.id === updatedDecision.id ? updatedDecision : d
-    ));
-    
-    // 关闭评估模态框
-    setIsInvestmentEvaluationOpen(false);
-    setEvaluatingDecision(null);
+    try {
+      // 更新决策的评估结果
+      const updatedDecision: InvestmentDecision = {
+        ...evaluatingDecision,
+        evaluated: true,
+        evaluationScore: result.totalScore,
+        evaluationResult: result
+      };
+      
+      // Save decision evaluation to Firebase Storage
+      await storageService.saveDecisionEvaluation(user.id, evaluatingDecision.id, result);
+      await storageService.saveInvestmentDecision(user.id, updatedDecision);
+      
+      // 更新决策列表
+      setDecisions(decisions.map(d => 
+        d.id === updatedDecision.id ? updatedDecision : d
+      ));
+      
+      // 关闭评估模态框
+      setIsInvestmentEvaluationOpen(false);
+      setEvaluatingDecision(null);
+    } catch (error) {
+      console.error('Error saving evaluation result:', error);
+      setError(language === 'zh' ? '保存评估结果失败' : 'Failed to save evaluation result');
+    }
   };
   
   /**
@@ -398,11 +474,21 @@ const App: React.FC = () => {
   };
 
 
-  const handleDeleteDecision = (decisionId: string) => {
-    setDecisions(decisions.filter((d) => d.id !== decisionId));
-    if (currentDecision?.id === decisionId) {
-      setCurrentDecision(null);
-      setCurrentStage(1);
+  const handleDeleteDecision = async (decisionId: string) => {
+    if (user) {
+      try {
+        // Delete from Firebase Storage
+        await storageService.deleteInvestmentDecision(user.id, decisionId);
+        // Update local state
+        setDecisions(decisions.filter((d) => d.id !== decisionId));
+        if (currentDecision?.id === decisionId) {
+          setCurrentDecision(null);
+          setCurrentStage(1);
+        }
+      } catch (error) {
+        console.error('Error deleting decision:', error);
+        setError(language === 'zh' ? '删除决策失败' : 'Failed to delete decision');
+      }
     }
   };
 
@@ -412,7 +498,8 @@ const App: React.FC = () => {
     setDecisions([]);
     setCurrentDecision(null);
     setCurrentStage(1);
-    localStorage.removeItem('investmentDecisions');
+    setUser(null);
+    // Note: We don't clear localStorage as it contains app settings
   };
 
   const providerDetails = [
@@ -633,6 +720,7 @@ const App: React.FC = () => {
                       <AlertCircle className="h-3 w-3 mr-1" />
                       {language === 'zh' ? '评估风险' : 'Assess Risk'}
                     </Button>
+                    
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -779,8 +867,10 @@ const App: React.FC = () => {
                   onSave={async (decision) => {
                     setIsSaving(true);
                     try {
-                      const saveResult = await saveData(decision);
-                      if (saveResult.success) {
+                      if (user) {
+                        // Save to Firebase Storage
+                        await storageService.saveInvestmentDecision(user.id, decision);
+                        
                         if (isEditing) {
                           setDecisions(decisions.map((d) => (d.id === decision.id ? decision : d)));
                         } else {
@@ -789,7 +879,12 @@ const App: React.FC = () => {
                         setCurrentDecision(null);
                         setCurrentStage(1);
                         setIsEditing(false);
+                      } else {
+                        throw new Error('User not authenticated');
                       }
+                    } catch (error) {
+                      console.error('Error saving decision:', error);
+                      setError(language === 'zh' ? '保存决策失败' : 'Failed to save decision');
                     } finally {
                       setIsSaving(false);
                     }
@@ -939,6 +1034,7 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
     </div>
   );
 };

@@ -9,6 +9,7 @@ import {
   signInWithEmailAndPassword,
   fetchSignInMethodsForEmail,
 } from 'firebase/auth';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -20,10 +21,33 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+// Only initialize Firebase if we have the required configuration
+let app;
+let auth;
+let storage;
+
+if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    storage = getStorage(app);
+  } catch (error) {
+    console.error('Failed to initialize Firebase:', error);
+    auth = null;
+    storage = null;
+  }
+} else {
+  console.warn('Firebase configuration is incomplete. Authentication features will be disabled.');
+  auth = null;
+  storage = null;
+}
+
+export { auth, storage };
 
 export const signInWithGoogle = async () => {
+  if (!auth) {
+    throw new Error('Firebase authentication is not configured. Please set up Firebase configuration.');
+  }
   try {
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(auth, provider);
@@ -35,6 +59,9 @@ export const signInWithGoogle = async () => {
 };
 
 export const signInWithGitHub = async () => {
+  if (!auth) {
+    throw new Error('Firebase authentication is not configured. Please set up Firebase configuration.');
+  }
   try {
     const provider = new GithubAuthProvider();
     provider.addScope('user:email');
@@ -47,6 +74,9 @@ export const signInWithGitHub = async () => {
 };
 
 export const logOut = async () => {
+  if (!auth) {
+    return;
+  }
   try {
     await signOut(auth);
   } catch (error) {
@@ -55,6 +85,9 @@ export const logOut = async () => {
 };
 
 export const registerWithEmail = async (email: string, password: string) => {
+  if (!auth) {
+    throw new Error('Firebase authentication is not configured. Please set up Firebase configuration.');
+  }
   try {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     return result.user;
@@ -65,6 +98,9 @@ export const registerWithEmail = async (email: string, password: string) => {
 };
 
 export const signInWithEmail = async (email: string, password: string) => {
+  if (!auth) {
+    throw new Error('Firebase authentication is not configured. Please set up Firebase configuration.');
+  }
   try {
     const result = await signInWithEmailAndPassword(auth, email, password);
     return result.user;
@@ -75,6 +111,9 @@ export const signInWithEmail = async (email: string, password: string) => {
 };
 
 export const signUpOrSignIn = async (email: string, password: string) => {
+  if (!auth) {
+    throw new Error('Firebase authentication is not configured. Please set up Firebase configuration.');
+  }
   try {
     const methods = await fetchSignInMethodsForEmail(auth, email);
 

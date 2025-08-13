@@ -210,7 +210,7 @@ const InvestmentEvaluation: React.FC<InvestmentEvaluationProps> = ({
   
   // Otherwise, show the evaluation process view (progress bar or start button).
   return (
-    <Card className="w-full shadow-lg dark:bg-gray-800 dark:border-gray-700">
+    <Card className="w-full shadow-lg bg-white dark:bg-gray-800 dark:border-gray-700">
       <CardHeader>
         <CardTitle className="text-gray-900 dark:text-white">
           {language === 'zh' ? '投资决策评估' : 'Investment Decision Evaluation'}

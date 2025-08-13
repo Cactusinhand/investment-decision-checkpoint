@@ -566,7 +566,7 @@ const App: React.FC = () => {
       </nav>
 
       <Dialog open={showLogin} onOpenChange={setShowLogin}>
-        <Card className="w-[350px] shadow-lg dark:bg-gray-900 dark:border-gray-700">
+        <Card className="w-[350px] shadow-lg bg-white dark:bg-gray-900 dark:border-gray-700">
           <CardHeader>
             <CardTitle className="text-gray-900 dark:text-white">
               {translations[language].loginRegister}
@@ -1019,7 +1019,7 @@ const App: React.FC = () => {
       {/* 投资评估组件 */}
       {isInvestmentEvaluationOpen && evaluatingDecision && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-auto">
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-auto">
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-auto bg-white dark:bg-gray-800 rounded-lg shadow-xl">
             <InvestmentEvaluation
               decision={evaluatingDecision}
               language={language}

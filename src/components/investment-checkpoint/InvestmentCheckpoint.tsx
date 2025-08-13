@@ -239,7 +239,7 @@ export const InvestmentCheckpoint: React.FC<InvestmentCheckpointProps> = ({
       animate="visible"
       exit="exit"
     >
-      <Card className="shadow-lg dark:bg-gray-800 dark:border-gray-700">
+      <Card className="shadow-lg bg-white dark:bg-gray-800 dark:border-gray-700">
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>

@@ -113,7 +113,7 @@ const EvaluationResultDisplay: React.FC<EvaluationResultProps> = ({
   };
 
   return (
-    <Card className="w-full shadow-lg dark:bg-gray-800 dark:border-gray-700">
+    <Card className="w-full shadow-lg bg-white dark:bg-gray-800 dark:border-gray-700">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>

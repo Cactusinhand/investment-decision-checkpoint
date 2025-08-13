@@ -1,10 +1,10 @@
 import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 import { storage } from './firebase';
-import { 
-  UserProfile, 
-  InvestmentDecision, 
-  RiskAssessmentResult, 
-  EvaluationResult 
+import {
+  UserProfile,
+  InvestmentDecision,
+  RiskAssessmentResult,
+  EvaluationResult
 } from '../types';
 
 /**
@@ -39,7 +39,7 @@ class StorageService {
    */
   private async uploadJSON(ref: any, data: any): Promise<void> {
     const jsonBlob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    
+
     let lastError: Error | null = null;
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
@@ -48,13 +48,13 @@ class StorageService {
       } catch (error) {
         lastError = error as Error;
         console.warn(`Upload attempt ${attempt} failed:`, error);
-        
+
         if (attempt < this.maxRetries) {
           await this.delay(this.retryDelay * attempt);
         }
       }
     }
-    
+
     throw lastError || new Error('Upload failed after maximum retries');
   }
 
@@ -63,7 +63,7 @@ class StorageService {
    */
   private async downloadJSON<T>(ref: any): Promise<T | null> {
     let lastError: Error | null = null;
-    
+
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         const url = await getDownloadURL(ref);
@@ -73,7 +73,7 @@ class StorageService {
       } catch (error) {
         lastError = error as Error;
         console.warn(`Download attempt ${attempt} failed:`, error);
-        
+
         // Check if error is "file not found" - don't retry for this
         if (error && typeof error === 'object' && 'code' in error) {
           const errorCode = (error as any).code;
@@ -81,13 +81,13 @@ class StorageService {
             return null;
           }
         }
-        
+
         if (attempt < this.maxRetries) {
           await this.delay(this.retryDelay * attempt);
         }
       }
     }
-    
+
     // If all retries failed and it's not a "not found" error, return null
     return null;
   }
@@ -289,7 +289,7 @@ class StorageService {
         const result = await listAll(collectionRef);
         stats.breakdown[collection.key as keyof typeof stats.breakdown] = result.items.length;
         stats.totalFiles += result.items.length;
-        
+
         // Estimate size (Firebase Storage doesn't provide file size in listAll)
         // This is a rough estimate based on typical JSON file sizes
         stats.totalSize += result.items.length * 2048; // ~2KB per file average
@@ -308,7 +308,7 @@ class StorageService {
     try {
       const collections = [
         'userProfiles',
-        'investmentDecisions', 
+        'investmentDecisions',
         'riskAssessments',
         'decisionEvaluations',
       ];
@@ -316,7 +316,7 @@ class StorageService {
       for (const collection of collections) {
         const collectionRef = this.getUserCollectionRef(collection, uid);
         const result = await listAll(collectionRef);
-        
+
         for (const itemRef of result.items) {
           await deleteObject(itemRef);
         }

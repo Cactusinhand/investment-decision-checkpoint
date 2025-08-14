@@ -21,23 +21,49 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
+// Log environment variable loading for debugging
+console.log('🔧 Environment Variables Check:');
+console.log('REACT_APP_FIREBASE_API_KEY:', firebaseConfig.apiKey ? '✅ Present' : '❌ Missing');
+console.log('REACT_APP_FIREBASE_AUTH_DOMAIN:', firebaseConfig.authDomain ? '✅ Present' : '❌ Missing');
+console.log('REACT_APP_FIREBASE_PROJECT_ID:', firebaseConfig.projectId ? '✅ Present' : '❌ Missing');
+console.log('REACT_APP_FIREBASE_STORAGE_BUCKET:', firebaseConfig.storageBucket ? '✅ Present' : '❌ Missing');
+console.log('REACT_APP_FIREBASE_MESSAGING_SENDER_ID:', firebaseConfig.messagingSenderId ? '✅ Present' : '❌ Missing');
+console.log('REACT_APP_FIREBASE_APP_ID:', firebaseConfig.appId ? '✅ Present' : '❌ Missing');
+console.log('REACT_APP_FIREBASE_MEASUREMENT_ID:', firebaseConfig.measurementId ? '✅ Present' : '❌ Missing');
+
+// Clean up API key (remove quotes if present)
+const cleanApiKey = firebaseConfig.apiKey?.replace(/^["']|["']$/g, '');
+
 // Only initialize Firebase if we have the required configuration
 let app;
 let auth;
 let storage;
 
-if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+if (cleanApiKey && firebaseConfig.projectId) {
   try {
+    console.log('🚀 Initializing Firebase with config:', {
+      projectId: firebaseConfig.projectId,
+      authDomain: firebaseConfig.authDomain,
+      storageBucket: firebaseConfig.storageBucket,
+      hasValidApiKey: !!cleanApiKey,
+    });
+    
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     storage = getStorage(app);
+    
+    console.log('✅ Firebase initialized successfully');
   } catch (error) {
-    console.error('Failed to initialize Firebase:', error);
+    console.error('❌ Failed to initialize Firebase:', error);
     auth = null;
     storage = null;
   }
 } else {
-  console.warn('Firebase configuration is incomplete. Authentication features will be disabled.');
+  console.warn('❌ Firebase configuration is incomplete. Required fields:', {
+    hasApiKey: !!cleanApiKey,
+    hasProjectId: !!firebaseConfig.projectId,
+  });
+  console.warn('Authentication features will be disabled.');
   auth = null;
   storage = null;
 }

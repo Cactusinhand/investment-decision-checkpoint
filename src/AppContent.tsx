@@ -41,18 +41,10 @@ import {
 } from './lib/firebase';
 import { storageService } from './lib/storage';
 import { onAuthStateChanged, fetchSignInMethodsForEmail, sendPasswordResetEmail } from 'firebase/auth';
-import { ref, uploadBytes, deleteObject } from 'firebase/storage';
-import { storage as firebaseStorage } from './lib/firebase';
-import { NotificationProvider, useNotifications } from './contexts/NotificationContext';
-import { NotificationContainer } from './components/NotificationContainer';
+import { SyncStatusIndicator } from './components/SyncStatusIndicator';
+import FirebaseDebugger from './components/FirebaseDebugger';
 
-const deepSeekApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY || ''; // 或者 process.env.VITE_DEEPSEEK_API_KEY
-
-/**
- * Helper function to simulate saving data (replace with actual API calls)
- * @param data The data to be saved (can be any type).
- * @returns A promise resolving to an object indicating success and the saved data.
- */
+const deepSeekApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY || '';
 
 const authErrorMessages: Record<string, { en: string; zh: string }> = {
   'auth/invalid-email': {
@@ -73,9 +65,7 @@ const authErrorMessages: Record<string, { en: string; zh: string }> = {
   },
 };
 
-const App: React.FC = () => {
-  const { showSuccess } = useNotifications();
-  
+const AppContent: React.FC = () => {
   // State Variables
   /** User profile information loaded from Firebase auth. */
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -84,7 +74,7 @@ const App: React.FC = () => {
   /** List of all investment decisions made by the user. Loaded from local storage. */
   const [decisions, setDecisions] = useState<InvestmentDecision[]>([]);
   /** The current stage (1-7) of the investment checkpoint being displayed. */
-  const [, setCurrentStage] = useState(1);
+  const [currentStage, setCurrentStage] = useState(1);
   /** Loading state, typically for asynchronous operations (e.g., API calls, saving). */
   const [isLoading, setLoading] = useState(false);
   /** Indicates if data is currently being saved (e.g., to local storage or backend). */
@@ -98,7 +88,7 @@ const App: React.FC = () => {
   /** Current language setting ('en' or 'zh'). */
   const [language, setLanguage] = useState<'en' | 'zh'>('zh');
   /** Translated questions based on the selected language. */
-  const [, setTranslatedQuestions] = useState<{ [key: number]: Question[] }>(rawQuestions);
+  const [translatedQuestions, setTranslatedQuestions] = useState<{ [key: number]: Question[] }>(rawQuestions);
   /** Authentication status (true if logged in, false otherwise). */
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -114,196 +104,67 @@ const App: React.FC = () => {
   /** The decision currently being evaluated or whose results are being viewed. */
   const [evaluatingDecision, setEvaluatingDecision] = useState<InvestmentDecision | null>(null);
   /** Stores the DeepSeek API key, loaded from environment variables. */
-  const apiKey = deepSeekApiKey;
-  
-  /** Data loading states */
-  const [isDataLoading, setIsDataLoading] = useState(false);
-  const [dataLoadingProgress, setDataLoadingProgress] = useState(0);
-  const [firebaseStatus, setFirebaseStatus] = useState<'checking' | 'connected' | 'disconnected' | 'error'>('checking');
-
-  // Check Firebase connection on app startup
-  useEffect(() => {
-    const checkFirebaseConnection = async () => {
-      console.log('🔍 Checking Firebase configuration...');
-      console.log('Firebase config:', {
-        hasApiKey: !!process.env.REACT_APP_FIREBASE_API_KEY,
-        hasProjectId: !!process.env.REACT_APP_FIREBASE_PROJECT_ID,
-        hasStorageBucket: !!process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-        apiKey: process.env.REACT_APP_FIREBASE_API_KEY?.substring(0, 10) + '...',
-        projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-        storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-      });
-      
-      if (!auth || !firebaseStorage) {
-        console.error('❌ Firebase not initialized properly');
-        setFirebaseStatus('error');
-        return;
-      }
-      
-      try {
-        // Test Firebase Storage with a simple operation
-        const testRef = ref(firebaseStorage, 'connection-test/test.json');
-        const testBlob = new Blob(['{"test": true}'], { type: 'application/json' });
-        await uploadBytes(testRef, testBlob);
-        await deleteObject(testRef);
-        
-        console.log('✅ Firebase connection successful');
-        setFirebaseStatus('connected');
-      } catch (error) {
-        console.error('❌ Firebase connection failed:', error);
-        setFirebaseStatus('error');
-      }
-    };
-    
-    checkFirebaseConnection();
-  }, []);
+  const [apiKey] = useState<string>(deepSeekApiKey);
 
   // Listen for Firebase authentication state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log('🔐 Auth state changed:', firebaseUser ? 'User logged in' : 'User logged out');
-      
       if (firebaseUser) {
         const uid = firebaseUser.uid;
-        console.log('👤 User authenticated:', { uid, email: firebaseUser.email, name: firebaseUser.displayName });
         
-        setIsDataLoading(true);
-        setDataLoadingProgress(0);
+        // Load user profile from Firebase Storage
+        let userProfile = await storageService.loadUserProfile(uid);
         
-        try {
-          // Step 1: Load user profile from Firebase Storage
-          console.log('📂 Loading user profile...');
-          setDataLoadingProgress(25);
-          let userProfile = await storageService.loadUserProfile(uid);
-          
-          if (!userProfile) {
-            console.log('🆕 Creating new user profile...');
-            userProfile = {
-              id: uid,
-              name: firebaseUser.displayName || firebaseUser.email || 'User',
-              riskTolerance: 'steady',
-              preferredStrategies: [],
-            };
-            await storageService.saveUserProfile(uid, userProfile);
-            console.log('✅ User profile created and saved');
-          } else {
-            console.log('✅ User profile loaded');
-          }
-          
-          setUser(userProfile);
-          
-          // Step 2: Load user's investment decisions from Firebase Storage
-          console.log('📊 Loading investment decisions...');
-          setDataLoadingProgress(50);
-          let userDecisions: InvestmentDecision[] = [];
-          
-          try {
-            userDecisions = await storageService.loadAllInvestmentDecisions(uid);
-            console.log(`✅ Loaded ${userDecisions.length} investment decisions from Firebase`);
-          } catch (error) {
-            console.error('❌ Error loading decisions from Firebase Storage:', error);
-            // Fallback to localStorage if Firebase fails
-            console.log('🔄 Falling back to localStorage...');
-            const savedDecisions = localStorage.getItem('investmentDecisions');
-            if (savedDecisions) {
-              try {
-                userDecisions = JSON.parse(savedDecisions);
-                console.log(`✅ Loaded ${userDecisions.length} decisions from localStorage`);
-              } catch (e) {
-                console.error('❌ Failed to parse saved decisions:', e);
-                userDecisions = [];
-              }
-            } else {
-              console.log('📭 No decisions found in localStorage');
-            }
-          }
-          
-          setDecisions(userDecisions);
-          
-          // Step 3: Load user's risk assessments from Firebase Storage
-          console.log('🎯 Loading risk assessments...');
-          setDataLoadingProgress(75);
-          try {
-            const userRiskAssessments = await storageService.loadAllRiskAssessments(uid);
-            console.log(`✅ Loaded ${userRiskAssessments.length} risk assessments from Firebase`);
-            
-            if (userRiskAssessments.length > 0) {
-              // Use the most recent risk assessment
-              const latestAssessment = userRiskAssessments[userRiskAssessments.length - 1];
-              setRiskAssessmentResult(latestAssessment);
-              console.log('✅ Latest risk assessment set');
-            }
-          } catch (error) {
-            console.error('❌ Error loading risk assessments from Firebase Storage:', error);
-          }
-          
-          setDataLoadingProgress(100);
-          console.log('🎉 All user data loaded successfully');
-          
-          // Show success notification
-          setTimeout(() => {
-            showSuccess(
-              'Welcome Back!', 
-              `Loaded ${userDecisions.length} decisions${userDecisions.length > 0 ? ' and your risk profile' : ''}`
-            );
-          }, 500);
-          
-        } catch (error) {
-          console.error('❌ Critical error during data loading:', error);
-          setError('Failed to load your data. Please try again or contact support.');
-        } finally {
-          setIsDataLoading(false);
-          setDataLoadingProgress(0);
+        // If no profile exists, create one
+        if (!userProfile) {
+          userProfile = {
+            id: uid,
+            name: firebaseUser.displayName || firebaseUser.email || 'User',
+            riskTolerance: 'steady',
+            preferredStrategies: [],
+          };
+          await storageService.saveUserProfile(uid, userProfile);
         }
+        
+        setUser(userProfile);
+        
+        // Load user's investment decisions from Firebase Storage
+        try {
+          const userDecisions = await storageService.loadAllInvestmentDecisions(uid);
+          setDecisions(userDecisions);
+        } catch (error) {
+          console.error('Error loading decisions from Firebase Storage:', error);
+          setDecisions([]);
+          setError(language === 'zh' ? '加载投资决策失败，请检查网络连接' : 'Failed to load investment decisions. Please check your network connection.');
+        }
+        
+        // Load user's risk assessments from Firebase Storage
+        try {
+          const userRiskAssessments = await storageService.loadAllRiskAssessments(uid);
+          if (userRiskAssessments.length > 0) {
+            // Use the most recent risk assessment
+            const latestAssessment = userRiskAssessments[userRiskAssessments.length - 1];
+            setRiskAssessmentResult(latestAssessment);
+          }
+        } catch (error) {
+          console.error('Error loading risk assessments from Firebase Storage:', error);
+        }
+
         
         setShowLogin(false);
       } else {
-        console.log('👋 User logged out');
         setUser(null);
         setDecisions([]);
-        setRiskAssessmentResult(null);
       }
-      
       setIsLoggedIn(!!firebaseUser);
     });
-    
     return () => unsubscribe();
-  }, [showSuccess, user]);
+  }, [language]);
   
-  // Load decisions from local storage on initial load
-  useEffect(() => {
-    const savedDecisions = localStorage.getItem('investmentDecisions');
-    if (savedDecisions) {
-      try {
-        setDecisions(JSON.parse(savedDecisions));
-      } catch (e) {
-        console.error("Failed to parse saved decisions:", e);
-        // Handle the error, e.g., clear the corrupted data
-        localStorage.removeItem('investmentDecisions');
-        setDecisions([]); // Reset to an empty array
-      }
-    }
-  }, []);
+  // Note: Removed localStorage loading on startup to ensure data consistency
+  // All data now loads from Firebase Storage when user is authenticated
 
-  // Save decisions to Firebase Storage whenever they change
-  useEffect(() => {
-    const saveDecisions = async () => {
-      if (user && decisions.length > 0) {
-        try {
-          // Save all decisions to Firebase Storage
-          for (const decision of decisions) {
-            await storageService.saveInvestmentDecision(user.id, decision);
-          }
-        } catch (error) {
-          console.error('Error saving decisions to Firebase Storage:', error);
-          // Fallback to localStorage
-          localStorage.setItem('investmentDecisions', JSON.stringify(decisions));
-        }
-      }
-    };
-    
-    saveDecisions();
-  }, [decisions, user]);
+  // Note: Sync status is now handled by SyncContext
 
   // Apply theme
   useEffect(() => {
@@ -336,14 +197,6 @@ const App: React.FC = () => {
       setLanguage(savedLanguage);
     }
   }, []);
-
-  // Test notification on app load (remove after testing)
-  useEffect(() => {
-    // Show a test notification to verify the system is working
-    setTimeout(() => {
-      showSuccess('Notification System', '🎉 Notifications are working! You should see this message.');
-    }, 1000);
-  }, [showSuccess]);
 
   // Save language to localStorage
   useEffect(() => {
@@ -416,7 +269,7 @@ const App: React.FC = () => {
         await storageService.saveRiskAssessment(user.id, result);
       } catch (error) {
         console.error('Error saving user profile:', error);
-        setError(language === 'zh' ? '保存用户档案失败' : 'Failed to save user profile');
+        setError(language === 'zh' ? '保存用户档案失败，请检查网络连接' : 'Failed to save user profile. Please check your network connection.');
       }
     }
   };
@@ -452,7 +305,7 @@ const App: React.FC = () => {
       setEvaluatingDecision(null);
     } catch (error) {
       console.error('Error saving evaluation result:', error);
-      setError(language === 'zh' ? '保存评估结果失败' : 'Failed to save evaluation result');
+      setError(language === 'zh' ? '保存评估结果失败，请检查网络连接' : 'Failed to save evaluation result. Please check your network connection.');
     }
   };
   
@@ -585,7 +438,7 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.error('Error deleting decision:', error);
-        setError(language === 'zh' ? '删除决策失败' : 'Failed to delete decision');
+        setError(language === 'zh' ? '删除决策失败，请检查网络连接' : 'Failed to delete decision. Please check your network connection.');
       }
     }
   };
@@ -600,58 +453,6 @@ const App: React.FC = () => {
     // Note: We don't clear localStorage as it contains app settings
   };
 
-  // Retry data loading function
-  const retryDataLoading = async () => {
-    if (!user || !auth) return;
-    
-    setIsDataLoading(true);
-    setDataLoadingProgress(0);
-    setError(null);
-    
-    try {
-      console.log('🔄 Retrying data loading for user:', user.id);
-      
-      // Step 1: Load user profile
-      setDataLoadingProgress(25);
-      const userProfile = await storageService.loadUserProfile(user.id);
-      if (userProfile) {
-        setUser(userProfile);
-        console.log('✅ User profile loaded');
-      }
-      
-      // Step 2: Load investment decisions
-      setDataLoadingProgress(50);
-      const userDecisions = await storageService.loadAllInvestmentDecisions(user.id);
-      setDecisions(userDecisions);
-      console.log(`✅ Loaded ${userDecisions.length} decisions`);
-      
-      // Step 3: Load risk assessments
-      setDataLoadingProgress(75);
-      const userRiskAssessments = await storageService.loadAllRiskAssessments(user.id);
-      if (userRiskAssessments.length > 0) {
-        const latestAssessment = userRiskAssessments[userRiskAssessments.length - 1];
-        setRiskAssessmentResult(latestAssessment);
-        console.log('✅ Risk assessment loaded');
-      }
-      
-      setDataLoadingProgress(100);
-      console.log('🎉 Data reload completed successfully');
-      
-      // Show success notification
-      showSuccess(
-        'Data Reloaded!', 
-        `Successfully loaded ${userDecisions.length} decisions${userRiskAssessments.length > 0 ? ' and your risk profile' : ''}`
-      );
-      
-    } catch (error) {
-      console.error('❌ Failed to reload data:', error);
-      setError('Failed to reload your data. Please check your internet connection and try again.');
-    } finally {
-      setIsDataLoading(false);
-      setDataLoadingProgress(0);
-    }
-  };
-
   const providerDetails = [
     { id: 'github.com', name: 'GitHub', message: translations[language].emailRegisteredWithGithub },
     { id: 'google.com', name: 'Google', message: translations[language].emailRegisteredWithGoogle },
@@ -664,7 +465,8 @@ const App: React.FC = () => {
     : '';
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="app-wrapper">
+      <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Top Navigation Bar */}
       <nav className="bg-white dark:bg-gray-800 shadow-md py-4">
         <div className="container mx-auto flex justify-between items-center px-4">
@@ -673,25 +475,16 @@ const App: React.FC = () => {
             <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
               {translations[language].appName}
             </h1>
-            {/* Firebase Status Indicator */}
-            <div className="flex items-center gap-1 ml-2">
-              <div className={`w-2 h-2 rounded-full ${
-                firebaseStatus === 'connected' ? 'bg-green-500' :
-                firebaseStatus === 'error' ? 'bg-red-500' :
-                firebaseStatus === 'checking' ? 'bg-yellow-500' : 'bg-gray-500'
-              }`} />
-              <span className="text-xs text-gray-500">
-                {firebaseStatus === 'connected' ? 'Firebase' :
-                 firebaseStatus === 'error' ? 'Firebase Error' :
-                 firebaseStatus === 'checking' ? 'Connecting...' : 'Offline'}
-              </span>
-            </div>
           </div>
           <div className="flex items-center gap-4">
             {isLoggedIn && (
-              <span className="text-gray-600 dark:text-gray-300">
-                {translations[language].welcome}, {user?.name}
-              </span>
+              <>
+                <span className="text-gray-600 dark:text-gray-300">
+                  {translations[language].welcome}, {user?.name}
+                </span>
+                {/* Sync status indicator - now using SyncContext */}
+                <SyncStatusIndicator />
+              </>
             )}
             <Button
               variant="ghost"
@@ -711,6 +504,22 @@ const App: React.FC = () => {
             >
               <Globe className="h-5 w-5" />
             </Button>
+            {/* Debug button - only in development */}
+            {process.env.NODE_ENV === 'development' && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  const debugPanel = document.getElementById('debug-panel');
+                  if (debugPanel) {
+                    debugPanel.classList.toggle('hidden');
+                  }
+                }}
+                className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+                title="Debug Tools"
+              >
+                🔍
+              </Button>
+            )}
             {isLoggedIn ? (
               <Button
                 variant="ghost"
@@ -799,32 +608,6 @@ const App: React.FC = () => {
         </Card>
       </Dialog>
 
-      {/* Data Loading Overlay */}
-      {isDataLoading && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {language === 'zh' ? '正在加载数据...' : 'Loading your data...'}
-              </h3>
-              <p className="text-gray-600 mb-4">
-                {language === 'zh' ? '正在从云端加载您的投资决策和风险评估' : 'Loading your investment decisions and risk assessments from the cloud'}
-              </p>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${dataLoadingProgress}%` }}
-                ></div>
-              </div>
-              <p className="text-sm text-gray-500 mt-2">
-                {dataLoadingProgress}%
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Main Content Area */}
       <div className="container mx-auto px-4 py-8">
         {!isLoggedIn && (
@@ -832,62 +615,16 @@ const App: React.FC = () => {
             {translations[language].loginReminder}
           </div>
         )}
-        
-        {/* Firebase Error Warning */}
-        {firebaseStatus === 'error' && (
-          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded relative" role="alert">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <strong className="font-bold">{translations[language].error}: </strong>
-                <span className="block sm:inline">
-                  {language === 'zh' ? 'Firebase 连接失败，数据可能无法同步到云端' : 'Firebase connection failed. Data may not sync to the cloud.'}
-                </span>
-                <span className="block text-sm mt-1">
-                  {language === 'zh' ? '请检查网络连接或联系支持' : 'Please check your internet connection or contact support.'}
-                </span>
-              </div>
-              <div className="flex gap-2 ml-4">
-                <button
-                  onClick={() => window.location.reload()}
-                  className="px-3 py-1 bg-red-200 text-red-800 rounded text-sm hover:bg-red-300 transition-colors"
-                >
-                  {language === 'zh' ? '刷新页面' : 'Reload Page'}
-                </button>
-                <button
-                  onClick={() => setError(null)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        
         {error && (
           <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded relative" role="alert">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <strong className="font-bold">{translations[language].error}: </strong>
-                <span className="block sm:inline">{error}</span>
-              </div>
-              <div className="flex gap-2 ml-4">
-                {isLoggedIn && (
-                  <button
-                    onClick={retryDataLoading}
-                    className="px-3 py-1 bg-red-200 text-red-800 rounded text-sm hover:bg-red-300 transition-colors"
-                  >
-                    {language === 'zh' ? '重试' : 'Retry'}
-                  </button>
-                )}
-                <button
-                  onClick={() => setError(null)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
+            <strong className="font-bold">{translations[language].error}: </strong>
+            <span className="block sm:inline">{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="absolute top-0 bottom-0 right-0 px-4 py-3"
+            >
+              <X className="h-6 w-6 text-red-500" />
+            </button>
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
@@ -1119,7 +856,7 @@ const App: React.FC = () => {
                       }
                     } catch (error) {
                       console.error('Error saving decision:', error);
-                      setError(language === 'zh' ? '保存决策失败' : 'Failed to save decision');
+                      setError(language === 'zh' ? '保存决策失败，请检查网络连接' : 'Failed to save decision. Please check your network connection.');
                     } finally {
                       setIsSaving(false);
                     }
@@ -1270,19 +1007,19 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Notification Container - displays toast notifications */}
-      <NotificationContainer />
+    </div>
+    
+    {/* Debug Panel - only in development */}
+    {process.env.NODE_ENV === 'development' && (
+      <div 
+        id="debug-panel" 
+        className="fixed bottom-0 right-0 w-96 max-h-96 overflow-auto bg-white border border-gray-300 shadow-lg rounded-tl-lg p-4 hidden"
+      >
+        <FirebaseDebugger />
+      </div>
+    )}
     </div>
   );
 };
 
-// Wrap the entire App with NotificationProvider
-const AppWithNotifications = () => {
-  return React.createElement(
-    NotificationProvider,
-    null,
-    React.createElement(App, null)
-  );
-};
-
-export default AppWithNotifications;
+export default AppContent;

@@ -84,6 +84,39 @@ class StorageService {
   }
 
   /**
+   * Validate that a decision has all required fields
+   */
+  private validateDecision(decision: any): decision is InvestmentDecision {
+    return decision && 
+           typeof decision.id === 'string' &&
+           typeof decision.name === 'string' &&
+           typeof decision.stage === 'number' &&
+           typeof decision.completed === 'boolean';
+  }
+
+  /**
+   * Validate that a summary has all required fields
+   */
+  private validateSummary(summary: any): summary is DecisionSummary {
+    return summary && 
+           typeof summary.id === 'string' &&
+           typeof summary.name === 'string' &&
+           typeof summary.stage === 'number' &&
+           typeof summary.completed === 'boolean';
+  }
+
+  /**
+   * Validate that a risk assessment has all required fields
+   */
+  private validateRiskAssessment(assessment: any): assessment is RiskAssessmentResult {
+    return assessment && 
+           typeof assessment.id === 'string' &&
+           typeof assessment.name === 'string' &&
+           typeof assessment.type === 'string' &&
+           typeof assessment.score === 'number';
+  }
+
+  /**
    * Download and parse JSON data from Firebase Storage with retry logic
    */
   private async downloadJSON<T>(ref: any): Promise<T | null> {
@@ -186,9 +219,10 @@ class StorageService {
   }
 
   /**
-   * Load decision summaries (partial data for fast loading)
+   * Load decision summaries (partial data for fast loading) - DEPRECATED
+   * @deprecated Use loadDecisionSummaries instead
    */
-  async loadDecisionSummaries(uid: string): Promise<DecisionSummary[]> {
+  async loadDecisionSummariesLegacy(uid: string): Promise<DecisionSummary[]> {
     const collectionRef = this.getUserCollectionRef('investmentDecisions', uid);
     const summaries: DecisionSummary[] = [];
 
@@ -196,7 +230,7 @@ class StorageService {
       const result = await listAll(collectionRef);
       for (const itemRef of result.items) {
         const decision = await this.downloadJSON<InvestmentDecision>(itemRef);
-        if (decision) {
+        if (decision && this.validateDecision(decision)) {
           // 只返回摘要信息
           summaries.push({
             id: decision.id,
@@ -206,6 +240,44 @@ class StorageService {
             evaluated: decision.evaluated,
             evaluationScore: decision.evaluationScore
           });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading decision summaries:', error);
+    }
+
+    return summaries;
+  }
+
+  /**
+   * Save decision summary to Firebase Storage (separate from full decision)
+   */
+  async saveDecisionSummary(uid: string, summary: DecisionSummary): Promise<void> {
+    const summaryRef = this.getUserRef('decisionSummaries', uid, `${summary.id}.json`);
+    await this.uploadJSON(summaryRef, summary);
+  }
+
+  /**
+   * Delete decision summary from Firebase Storage
+   */
+  async deleteDecisionSummary(uid: string, decisionId: string): Promise<void> {
+    const summaryRef = this.getUserRef('decisionSummaries', uid, `${decisionId}.json`);
+    await deleteObject(summaryRef);
+  }
+
+  /**
+   * Load decision summaries (true summaries, not full decisions)
+   */
+  async loadDecisionSummaries(uid: string): Promise<DecisionSummary[]> {
+    const collectionRef = this.getUserCollectionRef('decisionSummaries', uid);
+    const summaries: DecisionSummary[] = [];
+
+    try {
+      const result = await listAll(collectionRef);
+      for (const itemRef of result.items) {
+        const summary = await this.downloadJSON<DecisionSummary>(itemRef);
+        if (summary && this.validateSummary(summary)) {
+          summaries.push(summary);
         }
       }
     } catch (error) {
@@ -226,7 +298,7 @@ class StorageService {
       const result = await listAll(collectionRef);
       for (const itemRef of result.items) {
         const decision = await this.downloadJSON<InvestmentDecision>(itemRef);
-        if (decision) {
+        if (decision && this.validateDecision(decision)) {
           decisions.push(decision);
         }
       }
@@ -276,7 +348,7 @@ class StorageService {
       const result = await listAll(collectionRef);
       for (const itemRef of result.items) {
         const assessment = await this.downloadJSON<RiskAssessmentResult>(itemRef);
-        if (assessment) {
+        if (assessment && this.validateRiskAssessment(assessment)) {
           // 只返回摘要信息
           summaries.push({
             id: itemRef.name.replace('.json', ''),
@@ -304,7 +376,7 @@ class StorageService {
       const result = await listAll(collectionRef);
       for (const itemRef of result.items) {
         const assessment = await this.downloadJSON<RiskAssessmentResult>(itemRef);
-        if (assessment) {
+        if (assessment && this.validateRiskAssessment(assessment)) {
           assessments.push(assessment);
         }
       }
@@ -441,6 +513,9 @@ export const {
   loadInvestmentDecision,
   loadAllInvestmentDecisions,
   loadDecisionSummaries,
+  saveDecisionSummary,
+  deleteDecisionSummary,
+  loadDecisionSummariesLegacy,
   deleteInvestmentDecision,
   saveRiskAssessment,
   loadRiskAssessment,

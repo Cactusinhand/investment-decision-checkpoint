@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import {
@@ -79,7 +79,7 @@ const authErrorMessages: Record<string, { en: string; zh: string }> = {
 const App: React.FC = () => {
   // State Variables
   /** User profile information loaded from Firebase auth. */
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<UserProfile | UserProfileIndex | null>(null);
   /** The currently active (being edited or viewed) investment decision. */
   const [currentDecision, setCurrentDecision] = useState<InvestmentDecision | null>(null);
   /** List of all investment decision summaries made by the user. Loaded from Firebase Storage. */
@@ -125,6 +125,8 @@ const App: React.FC = () => {
   /** Loading state for social login buttons */
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [loadingGitHub, setLoadingGitHub] = useState(false);
+  /** Track pending requests to prevent duplicates */
+  const pendingRequests = useRef<Map<string, Promise<InvestmentDecision | null>>>(new Map());
   /** Stores the DeepSeek API key, loaded from environment variables. */
   const [apiKey, setApiKey] = useState<string>(deepSeekApiKey);
 
@@ -343,14 +345,19 @@ const App: React.FC = () => {
       
       // 更新决策缓存和摘要
       manageCache(updatedDecision.id, updatedDecision);
-      setDecisionSummaries(prev => prev.map(d => d.id === updatedDecision.id ? {
-        ...d,
+      
+      // Update summary
+      const updatedSummary: DecisionSummary = {
+        id: updatedDecision.id,
         name: updatedDecision.name,
         stage: updatedDecision.stage,
         completed: updatedDecision.completed,
         evaluated: updatedDecision.evaluated,
         evaluationScore: updatedDecision.evaluationScore
-      } : d));
+      };
+      await storageService.saveDecisionSummary(user.id, updatedSummary);
+      
+      setDecisionSummaries(prev => prev.map(d => d.id === updatedDecision.id ? updatedSummary : d));
       
       // 关闭评估模态框
       setIsInvestmentEvaluationOpen(false);
@@ -381,7 +388,9 @@ const App: React.FC = () => {
   /**
    * Manage cache with LRU eviction policy
    */
-  const manageCache = useCallback((decisionId: string, decision: InvestmentDecision) => {
+  const manageCache = useCallback((decisionId: string, decision: InvestmentDecision | null) => {
+    if (!decision) return; // Don't cache null/undefined decisions
+    
     setLruKeys(prevLruKeys => {
       // Move the key to the end of the array to mark it as recently used
       const newLruKeys = prevLruKeys.filter(key => key !== decisionId);
@@ -415,9 +424,8 @@ const App: React.FC = () => {
   };
 
   /**
-   * Load complete decision data (lazy loading)
+   * Load complete decision data (lazy loading) with request deduplication
    */
-
   const loadCompleteDecision = useCallback(async (decisionId: string): Promise<InvestmentDecision | null> => {
     // Check cache first
     if (decisionsCache.has(decisionId)) {
@@ -429,22 +437,38 @@ const App: React.FC = () => {
       return decisionsCache.get(decisionId) || null;
     }
     
-    setLoadingDecisionId(decisionId);
-    try {
-      if (!user) return null;
-      
-      const completeDecision = await storageService.loadInvestmentDecision(user.id, decisionId);
-      if (completeDecision) {
-        // Use managed cache to add with LRU policy
-        manageCache(decisionId, completeDecision);
-        return completeDecision;
-      }
-    } catch (error) {
-      console.error('Error loading complete decision:', error);
-    } finally {
-      setLoadingDecisionId(null);
+    // Check if request is already in progress
+    if (pendingRequests.current.has(decisionId)) {
+      return pendingRequests.current.get(decisionId) || null;
     }
-    return null;
+    
+    setLoadingDecisionId(decisionId);
+    
+    // Create the request promise
+    const requestPromise = (async () => {
+      try {
+        if (!user) return null;
+        
+        const completeDecision = await storageService.loadInvestmentDecision(user.id, decisionId);
+        if (completeDecision) {
+          // Use managed cache to add with LRU policy
+          manageCache(decisionId, completeDecision);
+          return completeDecision;
+        }
+        return null;
+      } catch (error) {
+        console.error('Error loading complete decision:', error);
+        return null;
+      } finally {
+        setLoadingDecisionId(null);
+        pendingRequests.current.delete(decisionId);
+      }
+    })();
+    
+    // Store the promise to prevent duplicate requests
+    pendingRequests.current.set(decisionId, requestPromise);
+    
+    return requestPromise;
   }, [decisionsCache, user, manageCache]);
 
 
@@ -588,6 +612,12 @@ const App: React.FC = () => {
       try {
         // Delete from Firebase Storage
         await storageService.deleteInvestmentDecision(user.id, decisionId);
+        // Also delete summary
+        try {
+          await storageService.deleteDecisionSummary(user.id, decisionId);
+        } catch (error) {
+          console.warn('Failed to delete decision summary:', error);
+        }
         // Update local state
         setDecisionSummaries(decisionSummaries.filter((d) => d.id !== decisionId));
         setDecisionsCache(prev => {
@@ -1003,29 +1033,26 @@ const App: React.FC = () => {
                       if (user) {
                         // Save to Firebase Storage
                         await storageService.saveInvestmentDecision(user.id, decision);
+
+                        // Create and save summary
+                        const summary: DecisionSummary = {
+                          id: decision.id,
+                          name: decision.name,
+                          stage: decision.stage,
+                          completed: decision.completed,
+                          evaluated: decision.evaluated,
+                          evaluationScore: decision.evaluationScore
+                        };
+                        await storageService.saveDecisionSummary(user.id, summary);
                         
                         if (isEditing) {
                           manageCache(decision.id, decision);
                           // Update summary
-                          setDecisionSummaries(prev => prev.map(d => d.id === decision.id ? {
-                            ...d,
-                            name: decision.name,
-                            stage: decision.stage,
-                            completed: decision.completed,
-                            evaluated: decision.evaluated,
-                            evaluationScore: decision.evaluationScore
-                          } : d));
+                          setDecisionSummaries(prev => prev.map(d => d.id === decision.id ? summary : d));
                         } else {
                           manageCache(decision.id, decision);
                           // Add new summary
-                          setDecisionSummaries(prev => [...prev, {
-                            id: decision.id,
-                            name: decision.name,
-                            stage: decision.stage,
-                            completed: decision.completed,
-                            evaluated: decision.evaluated,
-                            evaluationScore: decision.evaluationScore
-                          }]);
+                          setDecisionSummaries(prev => [...prev, summary]);
                         }
                         setCurrentDecision(null);
                         setCurrentStage(1);

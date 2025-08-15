@@ -4,8 +4,33 @@ import {
   UserProfile,
   InvestmentDecision,
   RiskAssessmentResult,
-  EvaluationResult
+  EvaluationResult,
+  RiskProfileType
 } from '../types';
+
+// 数据摘要类型定义
+export interface UserProfileIndex {
+  id: string;
+  name: string;
+  riskTolerance: RiskProfileType; // 使用 RiskProfileType 以增强类型安全
+  preferredStrategies: string[];
+}
+
+export interface DecisionSummary {
+  id: string;
+  name: string;
+  stage: number;
+  completed: boolean;
+  evaluated?: boolean;
+  evaluationScore?: number;
+}
+
+export interface RiskAssessmentSummary {
+  id: string;
+  name: string;
+  type: RiskProfileType; // 使用 RiskProfileType 以增强类型安全
+  score: number;
+}
 
 /**
  * Firebase Storage Service
@@ -62,7 +87,7 @@ class StorageService {
    * Download and parse JSON data from Firebase Storage with retry logic
    */
   private async downloadJSON<T>(ref: any): Promise<T | null> {
-    let lastError: Error | null = null;
+    // let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
@@ -71,7 +96,7 @@ class StorageService {
         if (!response.ok) return null;
         return await response.json();
       } catch (error) {
-        lastError = error as Error;
+        // lastError = error as Error;
         console.warn(`Download attempt ${attempt} failed:`, error);
 
         // Check if error is "file not found" - don't retry for this
@@ -110,6 +135,23 @@ class StorageService {
   }
 
   /**
+   * Load user profile index (partial data for fast loading)
+   */
+  async loadUserProfileIndex(uid: string): Promise<UserProfileIndex | null> {
+    const profileRef = this.getUserRef('userProfiles', uid, 'profile.json');
+    const fullProfile = await this.downloadJSON<UserProfile>(profileRef);
+    if (!fullProfile) return null;
+    
+    // 只返回关键字段
+    return {
+      id: fullProfile.id,
+      name: fullProfile.name,
+      riskTolerance: fullProfile.riskTolerance,
+      preferredStrategies: fullProfile.preferredStrategies
+    };
+  }
+
+  /**
    * Load user profile from Firebase Storage
    */
   async loadUserProfile(uid: string): Promise<UserProfile | null> {
@@ -141,6 +183,36 @@ class StorageService {
   async loadInvestmentDecision(uid: string, decisionId: string): Promise<InvestmentDecision | null> {
     const decisionRef = this.getUserRef('investmentDecisions', uid, `${decisionId}.json`);
     return await this.downloadJSON<InvestmentDecision>(decisionRef);
+  }
+
+  /**
+   * Load decision summaries (partial data for fast loading)
+   */
+  async loadDecisionSummaries(uid: string): Promise<DecisionSummary[]> {
+    const collectionRef = this.getUserCollectionRef('investmentDecisions', uid);
+    const summaries: DecisionSummary[] = [];
+
+    try {
+      const result = await listAll(collectionRef);
+      for (const itemRef of result.items) {
+        const decision = await this.downloadJSON<InvestmentDecision>(itemRef);
+        if (decision) {
+          // 只返回摘要信息
+          summaries.push({
+            id: decision.id,
+            name: decision.name,
+            stage: decision.stage,
+            completed: decision.completed,
+            evaluated: decision.evaluated,
+            evaluationScore: decision.evaluationScore
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading decision summaries:', error);
+    }
+
+    return summaries;
   }
 
   /**
@@ -191,6 +263,34 @@ class StorageService {
   async loadRiskAssessment(uid: string, assessmentId: string): Promise<RiskAssessmentResult | null> {
     const assessmentRef = this.getUserRef('riskAssessments', uid, `${assessmentId}.json`);
     return await this.downloadJSON<RiskAssessmentResult>(assessmentRef);
+  }
+
+  /**
+   * Load risk assessment summaries (partial data for fast loading)
+   */
+  async loadRiskAssessmentSummaries(uid: string): Promise<RiskAssessmentSummary[]> {
+    const collectionRef = this.getUserCollectionRef('riskAssessments', uid);
+    const summaries: RiskAssessmentSummary[] = [];
+
+    try {
+      const result = await listAll(collectionRef);
+      for (const itemRef of result.items) {
+        const assessment = await this.downloadJSON<RiskAssessmentResult>(itemRef);
+        if (assessment) {
+          // 只返回摘要信息
+          summaries.push({
+            id: itemRef.name.replace('.json', ''),
+            name: assessment.name,
+            type: assessment.type,
+            score: assessment.score
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading risk assessment summaries:', error);
+    }
+
+    return summaries;
   }
 
   /**
@@ -335,14 +435,17 @@ export const storageService = new StorageService();
 export const {
   saveUserProfile,
   loadUserProfile,
+  loadUserProfileIndex,
   deleteUserProfile,
   saveInvestmentDecision,
   loadInvestmentDecision,
   loadAllInvestmentDecisions,
+  loadDecisionSummaries,
   deleteInvestmentDecision,
   saveRiskAssessment,
   loadRiskAssessment,
   loadAllRiskAssessments,
+  loadRiskAssessmentSummaries,
   deleteRiskAssessment,
   saveDecisionEvaluation,
   loadDecisionEvaluation,

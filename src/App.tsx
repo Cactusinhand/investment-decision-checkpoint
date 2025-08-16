@@ -39,7 +39,7 @@ import {
   logOut,
   auth,
 } from './lib/firebase';
-import { storageService } from './lib/storage';
+import { storageService, UserProfileIndex } from './lib/storage';
 import { onAuthStateChanged, fetchSignInMethodsForEmail, sendPasswordResetEmail } from 'firebase/auth';
 
 const deepSeekApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY || ''; // 或者 process.env.VITE_DEEPSEEK_API_KEY
@@ -79,10 +79,10 @@ const authErrorMessages: Record<string, { en: string; zh: string }> = {
 const App: React.FC = () => {
   // State Variables
   /** User profile information loaded from Firebase auth. */
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<UserProfile | UserProfileIndex | null>(null);
   /** The currently active (being edited or viewed) investment decision. */
   const [currentDecision, setCurrentDecision] = useState<InvestmentDecision | null>(null);
-  /** List of all investment decisions made by the user. Loaded from local storage. */
+  /** List of all investment decisions made by the user. Loaded from Firebase Storage. */
   const [decisions, setDecisions] = useState<InvestmentDecision[]>([]);
   /** The current stage (1-7) of the investment checkpoint being displayed. */
   const [currentStage, setCurrentStage] = useState(1);
@@ -114,87 +114,114 @@ const App: React.FC = () => {
   const [isInvestmentEvaluationOpen, setIsInvestmentEvaluationOpen] = useState(false);
   /** The decision currently being evaluated or whose results are being viewed. */
   const [evaluatingDecision, setEvaluatingDecision] = useState<InvestmentDecision | null>(null);
+
+  /** Loading state for social login buttons */
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [loadingGitHub, setLoadingGitHub] = useState(false);
+
   /** Stores the DeepSeek API key, loaded from environment variables. */
   const [apiKey, setApiKey] = useState<string>(deepSeekApiKey);
 
-  // Listen for Firebase authentication state changes
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const uid = firebaseUser.uid;
-        
-        // Load user profile from Firebase Storage
-        let userProfile = await storageService.loadUserProfile(uid);
-        
-        // If no profile exists, create one
-        if (!userProfile) {
-          userProfile = {
-            id: uid,
-            name: firebaseUser.displayName || firebaseUser.email || 'User',
-            riskTolerance: 'steady',
-            preferredStrategies: [],
-          };
-          await storageService.saveUserProfile(uid, userProfile);
-        }
-        
-        setUser(userProfile);
-        
-        // Load user's investment decisions from Firebase Storage
-        try {
-          const userDecisions = await storageService.loadAllInvestmentDecisions(uid);
-          setDecisions(userDecisions);
-        } catch (error) {
-          console.error('Error loading decisions from Firebase Storage:', error);
-          // Fallback to localStorage if Firebase fails
-          const savedDecisions = localStorage.getItem('investmentDecisions');
-          if (savedDecisions) {
-            try {
-              setDecisions(JSON.parse(savedDecisions));
-            } catch (e) {
-              console.error('Failed to parse saved decisions:', e);
-              setDecisions([]);
-            }
-          }
-        }
-        
-        // Load user's risk assessments from Firebase Storage
-        try {
-          const userRiskAssessments = await storageService.loadAllRiskAssessments(uid);
-          if (userRiskAssessments.length > 0) {
-            // Use the most recent risk assessment
-            const latestAssessment = userRiskAssessments[userRiskAssessments.length - 1];
-            setRiskAssessmentResult(latestAssessment);
-          }
-        } catch (error) {
-          console.error('Error loading risk assessments from Firebase Storage:', error);
-        }
-
-        
-        setShowLogin(false);
-      } else {
-        setUser(null);
+  // 分离数据加载，不阻塞认证状态更新
+  const loadUserDataAsync = useCallback(async (uid: string) => {
+    if (!uid) {
+      console.log('loadUserDataAsync called with no UID, skipping');
+      return;
+    }
+    
+    console.log('Starting to load user data for UID:', uid);
+    
+    try {
+      // 验证当前认证状态
+      const currentUser = auth.currentUser;
+      if (!currentUser || currentUser.uid !== uid) {
+        console.log('Current user does not match UID, skipping data load');
+        return;
+      }
+      
+      // 加载用户完整档案
+      let userProfile = await storageService.loadUserProfile(uid);
+      
+      // 如果不存在，创建新档案
+      if (!userProfile) {
+        userProfile = {
+          id: uid,
+          name: auth.currentUser?.displayName || auth.currentUser?.email || 'User',
+          riskTolerance: 'steady',
+          preferredStrategies: [],
+        };
+        await storageService.saveUserProfile(uid, userProfile);
+      }
+      
+      setUser(userProfile);
+      
+      // 加载用户决策数据
+      try {
+        const decisions = await storageService.loadAllInvestmentDecisions(uid);
+        setDecisions(decisions);
+      } catch (error) {
+        console.error('Error loading decisions from Firebase Storage:', error);
         setDecisions([]);
       }
-      setIsLoggedIn(!!firebaseUser);
-    });
-    return () => unsubscribe();
-  }, []);
-  
-  // Load decisions from local storage on initial load
-  useEffect(() => {
-    const savedDecisions = localStorage.getItem('investmentDecisions');
-    if (savedDecisions) {
+      
+      // 加载用户风险评估数据
       try {
-        setDecisions(JSON.parse(savedDecisions));
-      } catch (e) {
-        console.error("Failed to parse saved decisions:", e);
-        // Handle the error, e.g., clear the corrupted data
-        localStorage.removeItem('investmentDecisions');
-        setDecisions([]); // Reset to an empty array
+        const riskAssessments = await storageService.loadAllRiskAssessments(uid);
+        if (riskAssessments.length > 0) {
+          // 使用最新的风险评估
+          const latestAssessment = riskAssessments[riskAssessments.length - 1];
+          setRiskAssessmentResult(latestAssessment);
+        }
+      } catch (error) {
+        console.error('Error loading risk assessments from Firebase Storage:', error);
       }
+    } catch (error) {
+      console.error('Failed to load user data:', error);
     }
   }, []);
 
+  // Listen for Firebase authentication state changes
+  useEffect(() => {
+    let isInitialLoad = true;
+    
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('Auth state changed:', firebaseUser ? `User: ${firebaseUser.uid}` : 'No user');
+      
+      if (firebaseUser && firebaseUser.uid) {
+        // 立即更新认证状态，不阻塞UI
+        setIsLoggedIn(true);
+        setShowLogin(false);
+        
+        const uid = firebaseUser.uid;
+        console.log('Loading user data for UID:', uid);
+        
+        // 异步加载用户数据，不阻塞认证状态更新
+        loadUserDataAsync(uid);
+      } else {
+        // 用户未登录，清除所有状态
+        console.log('No user logged in, clearing all data');
+        setIsLoggedIn(false);
+        setUser(null);
+        setDecisions([]);
+        setRiskAssessmentResult(null);
+        setCurrentDecision(null);
+        setCurrentStage(1);
+        setError(null);
+        clearUserData();
+        
+        // 如果是初始加载且没有用户，不显示错误
+        if (isInitialLoad) {
+          console.log('Initial load with no user, skipping error display');
+          isInitialLoad = false;
+          return;
+        }
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [loadUserDataAsync]);
+  
+  
   // Save decisions to Firebase Storage whenever they change
   useEffect(() => {
     const saveDecisions = async () => {
@@ -206,8 +233,6 @@ const App: React.FC = () => {
           }
         } catch (error) {
           console.error('Error saving decisions to Firebase Storage:', error);
-          // Fallback to localStorage
-          localStorage.setItem('investmentDecisions', JSON.stringify(decisions));
         }
       }
     };
@@ -345,9 +370,7 @@ const App: React.FC = () => {
       await storageService.saveInvestmentDecision(user.id, updatedDecision);
       
       // 更新决策列表
-      setDecisions(decisions.map(d => 
-        d.id === updatedDecision.id ? updatedDecision : d
-      ));
+      setDecisions(prev => prev.map(d => d.id === updatedDecision.id ? updatedDecision : d));
       
       // 关闭评估模态框
       setIsInvestmentEvaluationOpen(false);
@@ -373,6 +396,68 @@ const App: React.FC = () => {
     // 设置当前评估的决策
     setEvaluatingDecision(decision);
     setIsInvestmentEvaluationOpen(true);
+  };
+
+  /**
+   * Clear user data
+   */
+  const clearUserData = () => {
+    setDecisions([]);
+    setCurrentDecision(null);
+    setCurrentStage(1);
+    setRiskAssessmentResult(null);
+  };
+
+  /**
+   * Load complete decision data
+   */
+  const loadCompleteDecision = useCallback(async (decisionId: string): Promise<InvestmentDecision | null> => {
+    if (!user) return null;
+    
+    try {
+      const completeDecision = await storageService.loadInvestmentDecision(user.id, decisionId);
+      return completeDecision;
+    } catch (error) {
+      console.error('Error loading complete decision:', error);
+      return null;
+    }
+  }, [user]);
+
+
+  /**
+   * Handle Google login with loading state
+   */
+  const handleGoogleLogin = async () => {
+    setLoadingGoogle(true);
+    setError(null);
+    try {
+      await signInWithGoogle();
+    } catch (error: any) {
+      const message =
+        error.message ||
+        translations[language].anErrorOccurred;
+      setError(message);
+    } finally {
+      setLoadingGoogle(false);
+    }
+  };
+
+  /**
+   * Handle GitHub login with loading state
+   */
+  const handleGitHubLogin = async () => {
+    setLoadingGitHub(true);
+    setError(null);
+    try {
+      await signInWithGitHub();
+    } catch (error: any) {
+      const message =
+        error.message ||
+        translations[language].anErrorOccurred;
+      setError(message);
+    } finally {
+      setLoadingGitHub(false);
+    }
   };
 
   const handleAuthAction = async (authFunction: (email: string, password: string) => Promise<any>) => {
@@ -430,12 +515,12 @@ const App: React.FC = () => {
    * Sets the current decision, stage, and editing mode.
    * @param decisionId - Optional ID of an existing decision to load.
    */
-  const startNewDecision = useCallback((decisionId?: string) => {
+  const startNewDecision = useCallback(async (decisionId?: string) => {
     if (!isLoggedIn) return; // Prevent if not logged in
 
     if (decisionId) {
-      // Load existing decision
-      const existingDecision = decisions.find((d) => d.id === decisionId);
+      // Load existing decision (lazy load)
+      const existingDecision = await loadCompleteDecision(decisionId);
       if (existingDecision) {
         setCurrentDecision(existingDecision);
         setCurrentStage(existingDecision.stage);
@@ -462,7 +547,7 @@ const App: React.FC = () => {
       setIsEditing(false);
     }
     setError(null); // Clear any previous errors
-  }, [decisions, language, isLoggedIn]);
+  }, [isLoggedIn, language, loadCompleteDecision]);
 
   // 取消当前决策编辑过程
   const cancelDecision = () => {
@@ -494,10 +579,7 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
     await logOut();
-    // Clear user data and decisions
-    setDecisions([]);
-    setCurrentDecision(null);
-    setCurrentStage(1);
+    clearUserData();
     setUser(null);
     // Note: We don't clear localStorage as it contains app settings
   };
@@ -620,16 +702,32 @@ const App: React.FC = () => {
               </div>
               <Button
                 className="w-full bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-700 dark:hover:bg-blue-800"
-                onClick={signInWithGoogle}
+                onClick={handleGoogleLogin}
+                disabled={loadingGoogle}
               >
-                {translations[language].signInGoogle}
+                {loadingGoogle ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                    {translations[language].signInGoogle}
+                  </div>
+                ) : (
+                  translations[language].signInGoogle
+                )}
               </Button>
               <Button
                 variant="outline"
                 className="w-full text-gray-900 dark:text-white dark:bg-gray-700 dark:hover:bg-gray-600"
-                onClick={signInWithGitHub}
+                onClick={handleGitHubLogin}
+                disabled={loadingGitHub}
               >
-                {translations[language].signInGitHub}
+                {loadingGitHub ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full mr-2" />
+                    {translations[language].signInGitHub}
+                  </div>
+                ) : (
+                  translations[language].signInGitHub
+                )}
               </Button>
             </div>
           </CardContent>
@@ -788,13 +886,13 @@ const App: React.FC = () => {
               <CardContent>
                 {decisions.filter((d) => !d.completed || (d.completed && !d.evaluated)).length > 0 ? (
                   <ul className="space-y-2">
-                    {decisions
-                      .filter((d) => !d.completed || (d.completed && !d.evaluated))
-                      .map((decision) => (
-                        <li
-                          key={decision.id}
-                          className="flex items-center justify-between p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer"
-                          onClick={() => startNewDecision(decision.id)}
+                                            {decisions
+                          .filter((d) => !d.completed || (d.completed && !d.evaluated))
+                          .map((decision) => (
+                            <li
+                              key={decision.id}
+                              className="flex items-center justify-between p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer"
+                              onClick={() => startNewDecision(decision.id)}
                         >
                           <span className="text-gray-900 dark:text-white">
                             {decision.name ||
@@ -870,11 +968,13 @@ const App: React.FC = () => {
                       if (user) {
                         // Save to Firebase Storage
                         await storageService.saveInvestmentDecision(user.id, decision);
-                        
+
                         if (isEditing) {
-                          setDecisions(decisions.map((d) => (d.id === decision.id ? decision : d)));
+                          // Update decision in list
+                          setDecisions(prev => prev.map(d => d.id === decision.id ? decision : d));
                         } else {
-                          setDecisions([...decisions, decision]);
+                          // Add new decision to list
+                          setDecisions(prev => [...prev, decision]);
                         }
                         setCurrentDecision(null);
                         setCurrentStage(1);
@@ -919,26 +1019,25 @@ const App: React.FC = () => {
                     ) : (
                       <div className="space-y-4">
                         {decisions.slice().reverse().map((decision) => (
-                          <Card
-                            key={decision.id}
-                            className={cn(
-                              'p-4 rounded-md',
-                              decision.completed && decision.evaluated
-                                ? 'bg-green-100 dark:bg-green-900/50 border border-green-400 dark:border-green-700'
-                                : decision.completed && !decision.evaluated
-                                ? 'bg-blue-100 dark:bg-blue-900/50 border border-blue-400 dark:border-blue-700'
-                                : 'bg-yellow-100 dark:bg-yellow-900/50 border border-yellow-400 dark:border-yellow-700',
-                              'flex justify-between items-center'
-                            )}
+                                                      <Card
+                              key={decision.id}
+                                                            className={cn(
+                                  'p-4 rounded-md',
+                                  decision.completed && decision.evaluated
+                                    ? 'bg-green-100 dark:bg-green-900/50 border border-green-400 dark:border-green-700'
+                                    : decision.completed && !decision.evaluated
+                                    ? 'bg-blue-100 dark:bg-green-900/50 border border-blue-400 dark:border-blue-700'
+                                    : 'bg-yellow-100 dark:bg-yellow-900/50 border border-yellow-400 dark:border-yellow-700',
+                                  'flex justify-between items-center'
+                                )}
                           >
                             <div className="flex flex-col">
-
-                              <span className="text-gray-900 dark:text-white font-medium">
-                                {decision.name ||
-                                  `${translations[language].decisionName} ${decision.id.slice(
-                                    -4
-                                  )}`}
-                              </span>
+                                                              <span className="text-gray-900 dark:text-white font-medium">
+                                  {decision.name ||
+                                    `${translations[language].decisionName} ${decision.id.slice(
+                                      -4
+                                    )}`}
+                                </span>
                               <span className="text-sm text-gray-500 dark:text-gray-400">
                                 {translations[language].stage}: {decision.stage}/7
                               </span>
@@ -957,11 +1056,11 @@ const App: React.FC = () => {
                                   onClick={() => startNewDecision(decision.id)}
                                   title={decision.evaluated ? (language === 'zh' ? '已评估的决策只能查看不能编辑' : 'Evaluated decisions can only be viewed, not edited') : ''}
                                   className={cn(
-                                    'text-gray-900 dark:text-white',
-                                    decision.completed
-                                      ? 'bg-green-300/50 hover:bg-green-400/50 dark:bg-green-700/50 dark:hover:bg-green-600/50'
-                                      : 'bg-yellow-300/50 hover:bg-yellow-400/50 dark:bg-yellow-700/50 dark:hover:bg-yellow-600/50'
-                                  )}
+                                      'text-gray-900 dark:text-white',
+                                      decision.completed
+                                        ? 'bg-green-300/50 hover:bg-green-400/50 dark:bg-green-700/50 dark:hover:bg-green-600/50'
+                                        : 'bg-yellow-300/50 hover:bg-yellow-400/50 dark:bg-yellow-700/50 dark:hover:bg-yellow-600/50'
+                                    )}
                                 >
                                   {decision.completed 
                                     ? (language === 'zh' ? '查看决策' : 'View Decision')
@@ -973,7 +1072,12 @@ const App: React.FC = () => {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => startEvaluateDecision(decision)}
+                                                                          onClick={async () => {
+                                      const fullDecision = await loadCompleteDecision(decision.id);        
+                                      if (fullDecision) {
+                                        startEvaluateDecision(fullDecision);
+                                      }
+                                    }}
                                     className={cn(
                                       'text-gray-900 dark:text-white',
                                       decision.evaluated

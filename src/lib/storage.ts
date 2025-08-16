@@ -1,11 +1,36 @@
-import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
-import { storage } from './firebase';
+import { ref, uploadBytes, deleteObject, listAll, getBytes, getDownloadURL } from 'firebase/storage';
+import { storage, auth } from './firebase';
 import {
   UserProfile,
   InvestmentDecision,
   RiskAssessmentResult,
-  EvaluationResult
+  EvaluationResult,
+  RiskProfileType
 } from '../types';
+
+// 数据摘要类型定义
+export interface UserProfileIndex {
+  id: string;
+  name: string;
+  riskTolerance: RiskProfileType; // 使用 RiskProfileType 以增强类型安全
+  preferredStrategies: string[];
+}
+
+export interface DecisionSummary {
+  id: string;
+  name: string;
+  stage: number;
+  completed: boolean;
+  evaluated?: boolean;
+  evaluationScore?: number;
+}
+
+export interface RiskAssessmentSummary {
+  id: string;
+  name: string;
+  type: RiskProfileType; // 使用 RiskProfileType 以增强类型安全
+  score: number;
+}
 
 /**
  * Firebase Storage Service
@@ -59,19 +84,84 @@ class StorageService {
   }
 
   /**
+   * Validate that a decision has all required fields
+   */
+  private validateDecision(decision: any): decision is InvestmentDecision {
+    return decision && 
+           typeof decision.id === 'string' &&
+           typeof decision.name === 'string' &&
+           typeof decision.stage === 'number' &&
+           typeof decision.completed === 'boolean';
+  }
+
+  /**
+   * Validate that a summary has all required fields
+   */
+  private validateSummary(summary: any): summary is DecisionSummary {
+    return summary && 
+           typeof summary.id === 'string' &&
+           typeof summary.name === 'string' &&
+           typeof summary.stage === 'number' &&
+           typeof summary.completed === 'boolean';
+  }
+
+  /**
+   * Validate that a user profile index has all required fields
+   */
+  private validateUserProfileIndex(index: any): index is UserProfileIndex {
+    return index && 
+           typeof index.id === 'string' &&
+           typeof index.name === 'string' &&
+           typeof index.riskTolerance === 'string' &&
+           Array.isArray(index.preferredStrategies);
+  }
+
+  /**
+   * Validate that a risk assessment has all required fields
+   */
+  private validateRiskAssessment(assessment: any): assessment is RiskAssessmentResult {
+    return assessment && 
+           typeof assessment.id === 'string' &&
+           typeof assessment.name === 'string' &&
+           typeof assessment.type === 'string' &&
+           typeof assessment.score === 'number';
+  }
+
+  /**
+   * Validate that a risk assessment summary has all required fields
+   */
+  private validateRiskAssessmentSummary(summary: any): summary is RiskAssessmentSummary {
+    return summary && 
+           typeof summary.id === 'string' &&
+           typeof summary.name === 'string' &&
+           typeof summary.type === 'string' &&
+           typeof summary.score === 'number';
+  }
+
+  /**
    * Download and parse JSON data from Firebase Storage with retry logic
    */
   private async downloadJSON<T>(ref: any): Promise<T | null> {
-    let lastError: Error | null = null;
-
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
+        // First try getBytes (requires auth, more secure)
+        if (auth?.currentUser) {
+          try {
+            const bytes = await getBytes(ref);
+            const text = new TextDecoder().decode(bytes);
+            return JSON.parse(text);
+          } catch (getBytesError) {
+            // If getBytes fails, fall back to getDownloadURL + fetch
+            console.warn('getBytes failed, trying fallback method:', getBytesError);
+          }
+        }
+        
+        // Fallback: use getDownloadURL + fetch (may have CORS issues but more compatible)
         const url = await getDownloadURL(ref);
         const response = await fetch(url);
         if (!response.ok) return null;
         return await response.json();
       } catch (error) {
-        lastError = error as Error;
         console.warn(`Download attempt ${attempt} failed:`, error);
 
         // Check if error is "file not found" - don't retry for this
@@ -107,6 +197,57 @@ class StorageService {
   async saveUserProfile(uid: string, profile: UserProfile): Promise<void> {
     const profileRef = this.getUserRef('userProfiles', uid, 'profile.json');
     await this.uploadJSON(profileRef, profile);
+    
+    // Also save the index for fast loading
+    const index: UserProfileIndex = {
+      id: profile.id,
+      name: profile.name,
+      riskTolerance: profile.riskTolerance,
+      preferredStrategies: profile.preferredStrategies
+    };
+    await this.saveUserProfileIndex(uid, index);
+  }
+
+  /**
+   * Save user profile index to Firebase Storage (separate from full profile)
+   */
+  async saveUserProfileIndex(uid: string, index: UserProfileIndex): Promise<void> {
+    const indexRef = this.getUserRef('userProfileIndexes', uid, 'index.json');
+    await this.uploadJSON(indexRef, index);
+  }
+
+  /**
+   * Delete user profile index from Firebase Storage
+   */
+  async deleteUserProfileIndex(uid: string): Promise<void> {
+    const indexRef = this.getUserRef('userProfileIndexes', uid, 'index.json');
+    await deleteObject(indexRef);
+  }
+
+  /**
+   * Load user profile index (true index, not full profile)
+   */
+  async loadUserProfileIndex(uid: string): Promise<UserProfileIndex | null> {
+    const indexRef = this.getUserRef('userProfileIndexes', uid, 'index.json');
+    return await this.downloadJSON<UserProfileIndex>(indexRef);
+  }
+
+  /**
+   * Load user profile index (partial data for fast loading) - DEPRECATED
+   * @deprecated Use loadUserProfileIndex instead
+   */
+  async loadUserProfileIndexLegacy(uid: string): Promise<UserProfileIndex | null> {
+    const profileRef = this.getUserRef('userProfiles', uid, 'profile.json');
+    const fullProfile = await this.downloadJSON<UserProfile>(profileRef);
+    if (!fullProfile) return null;
+    
+    // 只返回关键字段
+    return {
+      id: fullProfile.id,
+      name: fullProfile.name,
+      riskTolerance: fullProfile.riskTolerance,
+      preferredStrategies: fullProfile.preferredStrategies
+    };
   }
 
   /**
@@ -123,6 +264,9 @@ class StorageService {
   async deleteUserProfile(uid: string): Promise<void> {
     const profileRef = this.getUserRef('userProfiles', uid, 'profile.json');
     await deleteObject(profileRef);
+    
+    // Also delete the index
+    await this.deleteUserProfileIndex(uid);
   }
 
   // ===== INVESTMENT DECISION OPERATIONS =====
@@ -144,6 +288,75 @@ class StorageService {
   }
 
   /**
+   * Load decision summaries (partial data for fast loading) - DEPRECATED
+   * @deprecated Use loadDecisionSummaries instead
+   */
+  async loadDecisionSummariesLegacy(uid: string): Promise<DecisionSummary[]> {
+    const collectionRef = this.getUserCollectionRef('investmentDecisions', uid);
+    const summaries: DecisionSummary[] = [];
+
+    try {
+      const result = await listAll(collectionRef);
+      for (const itemRef of result.items) {
+        const decision = await this.downloadJSON<InvestmentDecision>(itemRef);
+        if (decision && this.validateDecision(decision)) {
+          // 只返回摘要信息
+          summaries.push({
+            id: decision.id,
+            name: decision.name,
+            stage: decision.stage,
+            completed: decision.completed,
+            evaluated: decision.evaluated,
+            evaluationScore: decision.evaluationScore
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading decision summaries:', error);
+    }
+
+    return summaries;
+  }
+
+  /**
+   * Save decision summary to Firebase Storage (separate from full decision)
+   */
+  async saveDecisionSummary(uid: string, summary: DecisionSummary): Promise<void> {
+    const summaryRef = this.getUserRef('decisionSummaries', uid, `${summary.id}.json`);
+    await this.uploadJSON(summaryRef, summary);
+  }
+
+  /**
+   * Delete decision summary from Firebase Storage
+   */
+  async deleteDecisionSummary(uid: string, decisionId: string): Promise<void> {
+    const summaryRef = this.getUserRef('decisionSummaries', uid, `${decisionId}.json`);
+    await deleteObject(summaryRef);
+  }
+
+  /**
+   * Load decision summaries (true summaries, not full decisions)
+   */
+  async loadDecisionSummaries(uid: string): Promise<DecisionSummary[]> {
+    const collectionRef = this.getUserCollectionRef('decisionSummaries', uid);
+    const summaries: DecisionSummary[] = [];
+
+    try {
+      const result = await listAll(collectionRef);
+      for (const itemRef of result.items) {
+        const summary = await this.downloadJSON<DecisionSummary>(itemRef);
+        if (summary && this.validateSummary(summary)) {
+          summaries.push(summary);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading decision summaries:', error);
+    }
+
+    return summaries;
+  }
+
+  /**
    * Load all investment decisions for a user
    */
   async loadAllInvestmentDecisions(uid: string): Promise<InvestmentDecision[]> {
@@ -154,7 +367,7 @@ class StorageService {
       const result = await listAll(collectionRef);
       for (const itemRef of result.items) {
         const decision = await this.downloadJSON<InvestmentDecision>(itemRef);
-        if (decision) {
+        if (decision && this.validateDecision(decision)) {
           decisions.push(decision);
         }
       }
@@ -182,6 +395,16 @@ class StorageService {
     const assessmentId = `risk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const assessmentRef = this.getUserRef('riskAssessments', uid, `${assessmentId}.json`);
     await this.uploadJSON(assessmentRef, assessment);
+    
+    // Also save the summary for fast loading
+    const summary: RiskAssessmentSummary = {
+      id: assessmentId,
+      name: assessment.name,
+      type: assessment.type,
+      score: assessment.score
+    };
+    await this.saveRiskAssessmentSummary(uid, summary);
+    
     return assessmentId;
   }
 
@@ -191,6 +414,73 @@ class StorageService {
   async loadRiskAssessment(uid: string, assessmentId: string): Promise<RiskAssessmentResult | null> {
     const assessmentRef = this.getUserRef('riskAssessments', uid, `${assessmentId}.json`);
     return await this.downloadJSON<RiskAssessmentResult>(assessmentRef);
+  }
+
+  /**
+   * Save risk assessment summary to Firebase Storage (separate from full assessment)
+   */
+  async saveRiskAssessmentSummary(uid: string, summary: RiskAssessmentSummary): Promise<void> {
+    const summaryRef = this.getUserRef('riskAssessmentSummaries', uid, `${summary.id}.json`);
+    await this.uploadJSON(summaryRef, summary);
+  }
+
+  /**
+   * Delete risk assessment summary from Firebase Storage
+   */
+  async deleteRiskAssessmentSummary(uid: string, assessmentId: string): Promise<void> {
+    const summaryRef = this.getUserRef('riskAssessmentSummaries', uid, `${assessmentId}.json`);
+    await deleteObject(summaryRef);
+  }
+
+  /**
+   * Load risk assessment summaries (true summaries, not full assessments)
+   */
+  async loadRiskAssessmentSummaries(uid: string): Promise<RiskAssessmentSummary[]> {
+    const collectionRef = this.getUserCollectionRef('riskAssessmentSummaries', uid);
+    const summaries: RiskAssessmentSummary[] = [];
+
+    try {
+      const result = await listAll(collectionRef);
+      for (const itemRef of result.items) {
+        const summary = await this.downloadJSON<RiskAssessmentSummary>(itemRef);
+        if (summary && this.validateRiskAssessmentSummary(summary)) {
+          summaries.push(summary);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading risk assessment summaries:', error);
+    }
+
+    return summaries;
+  }
+
+  /**
+   * Load risk assessment summaries (partial data for fast loading) - DEPRECATED
+   * @deprecated Use loadRiskAssessmentSummaries instead
+   */
+  async loadRiskAssessmentSummariesLegacy(uid: string): Promise<RiskAssessmentSummary[]> {
+    const collectionRef = this.getUserCollectionRef('riskAssessments', uid);
+    const summaries: RiskAssessmentSummary[] = [];
+
+    try {
+      const result = await listAll(collectionRef);
+      for (const itemRef of result.items) {
+        const assessment = await this.downloadJSON<RiskAssessmentResult>(itemRef);
+        if (assessment && this.validateRiskAssessment(assessment)) {
+          // 只返回摘要信息
+          summaries.push({
+            id: itemRef.name.replace('.json', ''),
+            name: assessment.name,
+            type: assessment.type,
+            score: assessment.score
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading risk assessment summaries:', error);
+    }
+
+    return summaries;
   }
 
   /**
@@ -204,7 +494,7 @@ class StorageService {
       const result = await listAll(collectionRef);
       for (const itemRef of result.items) {
         const assessment = await this.downloadJSON<RiskAssessmentResult>(itemRef);
-        if (assessment) {
+        if (assessment && this.validateRiskAssessment(assessment)) {
           assessments.push(assessment);
         }
       }
@@ -221,6 +511,9 @@ class StorageService {
   async deleteRiskAssessment(uid: string, assessmentId: string): Promise<void> {
     const assessmentRef = this.getUserRef('riskAssessments', uid, `${assessmentId}.json`);
     await deleteObject(assessmentRef);
+    
+    // Also delete the summary
+    await this.deleteRiskAssessmentSummary(uid, assessmentId);
   }
 
   // ===== DECISION EVALUATION OPERATIONS =====
@@ -311,6 +604,9 @@ class StorageService {
         'investmentDecisions',
         'riskAssessments',
         'decisionEvaluations',
+        'decisionSummaries',
+        'riskAssessmentSummaries',
+        'userProfileIndexes',
       ];
 
       for (const collection of collections) {
@@ -335,14 +631,26 @@ export const storageService = new StorageService();
 export const {
   saveUserProfile,
   loadUserProfile,
+  loadUserProfileIndex,
+  saveUserProfileIndex,
+  deleteUserProfileIndex,
+  loadUserProfileIndexLegacy,
   deleteUserProfile,
   saveInvestmentDecision,
   loadInvestmentDecision,
   loadAllInvestmentDecisions,
+  loadDecisionSummaries,
+  saveDecisionSummary,
+  deleteDecisionSummary,
+  loadDecisionSummariesLegacy,
   deleteInvestmentDecision,
   saveRiskAssessment,
   loadRiskAssessment,
   loadAllRiskAssessments,
+  loadRiskAssessmentSummaries,
+  saveRiskAssessmentSummary,
+  deleteRiskAssessmentSummary,
+  loadRiskAssessmentSummariesLegacy,
   deleteRiskAssessment,
   saveDecisionEvaluation,
   loadDecisionEvaluation,

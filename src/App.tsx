@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import {
@@ -39,7 +39,7 @@ import {
   logOut,
   auth,
 } from './lib/firebase';
-import { storageService, UserProfileIndex, DecisionSummary } from './lib/storage';
+import { storageService, UserProfileIndex } from './lib/storage';
 import { onAuthStateChanged, fetchSignInMethodsForEmail, sendPasswordResetEmail } from 'firebase/auth';
 
 const deepSeekApiKey = process.env.REACT_APP_DEEPSEEK_API_KEY || ''; // 或者 process.env.VITE_DEEPSEEK_API_KEY
@@ -82,14 +82,8 @@ const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | UserProfileIndex | null>(null);
   /** The currently active (being edited or viewed) investment decision. */
   const [currentDecision, setCurrentDecision] = useState<InvestmentDecision | null>(null);
-  /** List of all investment decision summaries made by the user. Loaded from Firebase Storage. */
-  const [decisionSummaries, setDecisionSummaries] = useState<DecisionSummary[]>([]);
-  /** Cache for complete investment decisions (lazy loaded) */
-  const [decisionsCache, setDecisionsCache] = useState<Map<string, InvestmentDecision>>(new Map());
-  /** LRU cache keys to track usage order */
-  const [lruKeys, setLruKeys] = useState<string[]>([]);
-  /** Maximum cache size */
-  const MAX_CACHE_SIZE = 50;
+  /** List of all investment decisions made by the user. Loaded from Firebase Storage. */
+  const [decisions, setDecisions] = useState<InvestmentDecision[]>([]);
   /** The current stage (1-7) of the investment checkpoint being displayed. */
   const [currentStage, setCurrentStage] = useState(1);
   /** Loading state, typically for asynchronous operations (e.g., API calls, saving). */
@@ -120,89 +114,121 @@ const App: React.FC = () => {
   const [isInvestmentEvaluationOpen, setIsInvestmentEvaluationOpen] = useState(false);
   /** The decision currently being evaluated or whose results are being viewed. */
   const [evaluatingDecision, setEvaluatingDecision] = useState<InvestmentDecision | null>(null);
-  /** Loading state for lazy loading complete decision data */
-  const [loadingDecisionId, setLoadingDecisionId] = useState<string | null>(null);
+
   /** Loading state for social login buttons */
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [loadingGitHub, setLoadingGitHub] = useState(false);
-  /** Track pending requests to prevent duplicates */
-  const pendingRequests = useRef<Map<string, Promise<InvestmentDecision | null>>>(new Map());
+
   /** Stores the DeepSeek API key, loaded from environment variables. */
   const [apiKey, setApiKey] = useState<string>(deepSeekApiKey);
 
+  // 分离数据加载，不阻塞认证状态更新
+  const loadUserDataAsync = useCallback(async (uid: string) => {
+    if (!uid) {
+      console.log('loadUserDataAsync called with no UID, skipping');
+      return;
+    }
+    
+    console.log('Starting to load user data for UID:', uid);
+    
+    try {
+      // 验证当前认证状态
+      const currentUser = auth.currentUser;
+      if (!currentUser || currentUser.uid !== uid) {
+        console.log('Current user does not match UID, skipping data load');
+        return;
+      }
+      
+      // 加载用户完整档案
+      let userProfile = await storageService.loadUserProfile(uid);
+      
+      // 如果不存在，创建新档案
+      if (!userProfile) {
+        userProfile = {
+          id: uid,
+          name: auth.currentUser?.displayName || auth.currentUser?.email || 'User',
+          riskTolerance: 'steady',
+          preferredStrategies: [],
+        };
+        await storageService.saveUserProfile(uid, userProfile);
+      }
+      
+      setUser(userProfile);
+      
+      // 加载用户决策数据
+      try {
+        const decisions = await storageService.loadAllInvestmentDecisions(uid);
+        setDecisions(decisions);
+      } catch (error) {
+        console.error('Error loading decisions from Firebase Storage:', error);
+        setDecisions([]);
+      }
+      
+      // 加载用户风险评估数据
+      try {
+        const riskAssessments = await storageService.loadAllRiskAssessments(uid);
+        if (riskAssessments.length > 0) {
+          // 使用最新的风险评估
+          const latestAssessment = riskAssessments[riskAssessments.length - 1];
+          setRiskAssessmentResult(latestAssessment);
+        }
+      } catch (error) {
+        console.error('Error loading risk assessments from Firebase Storage:', error);
+      }
+    } catch (error) {
+      console.error('Failed to load user data:', error);
+    }
+  }, []);
+
   // Listen for Firebase authentication state changes
   useEffect(() => {
+    let isInitialLoad = true;
+    
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const uid = firebaseUser.uid;
-        
-        // Load user profile index (partial data for fast loading)
-        let userProfileIndex = await storageService.loadUserProfileIndex(uid);
-        
-        // If no profile exists, create one
-        if (!userProfileIndex) {
-          const fullProfile = {
-            id: uid,
-            name: firebaseUser.displayName || firebaseUser.email || 'User',
-            riskTolerance: 'steady',
-            preferredStrategies: [],
-          };
-          await storageService.saveUserProfile(uid, fullProfile);
-          userProfileIndex = {
-            id: fullProfile.id,
-            name: fullProfile.name,
-            riskTolerance: fullProfile.riskTolerance,
-            preferredStrategies: fullProfile.preferredStrategies
-          };
-        }
-        
-        setUser(userProfileIndex);
-        
-        // Load user's decision summaries from Firebase Storage (partial data)
-        try {
-          const summaries = await storageService.loadDecisionSummaries(uid);
-          setDecisionSummaries(summaries);
-        } catch (error) {
-          console.error('Error loading decision summaries from Firebase Storage:', error);
-          setDecisionSummaries([]);
-        }
-        
-        // Load user's risk assessment summaries from Firebase Storage (partial data)
-        try {
-          const riskSummaries = await storageService.loadRiskAssessmentSummaries(uid);
-          if (riskSummaries.length > 0) {
-            // Use the most recent risk assessment
-            const latestSummary = riskSummaries[riskSummaries.length - 1];
-            // Load complete data for the latest assessment only
-            const fullAssessment = await storageService.loadRiskAssessment(uid, latestSummary.id);
-            if (fullAssessment) {
-              setRiskAssessmentResult(fullAssessment);
-            }
-          }
-        } catch (error) {
-          console.error('Error loading risk assessment summaries from Firebase Storage:', error);
-        }
-
-        
+      console.log('Auth state changed:', firebaseUser ? `User: ${firebaseUser.uid}` : 'No user');
+      
+      if (firebaseUser && firebaseUser.uid) {
+        // 立即更新认证状态，不阻塞UI
+        setIsLoggedIn(true);
         setShowLogin(false);
+        
+        const uid = firebaseUser.uid;
+        console.log('Loading user data for UID:', uid);
+        
+        // 异步加载用户数据，不阻塞认证状态更新
+        loadUserDataAsync(uid);
       } else {
+        // 用户未登录，清除所有状态
+        console.log('No user logged in, clearing all data');
+        setIsLoggedIn(false);
         setUser(null);
-        setDecisionSummaries([]);
-        clearCache();
+        setDecisions([]);
+        setRiskAssessmentResult(null);
+        setCurrentDecision(null);
+        setCurrentStage(1);
+        setError(null);
+        clearUserData();
+        
+        // 如果是初始加载且没有用户，不显示错误
+        if (isInitialLoad) {
+          console.log('Initial load with no user, skipping error display');
+          isInitialLoad = false;
+          return;
+        }
       }
-      setIsLoggedIn(!!firebaseUser);
     });
+    
     return () => unsubscribe();
-  }, []);
+  }, [loadUserDataAsync]);
   
   
   // Save decisions to Firebase Storage whenever they change
   useEffect(() => {
     const saveDecisions = async () => {
-      if (user && decisionsCache.size > 0) {
+      if (user && decisions.length > 0) {
         try {
-          // Save all cached decisions to Firebase Storage
-          for (const decision of decisionsCache.values()) {
+          // Save all decisions to Firebase Storage
+          for (const decision of decisions) {
             await storageService.saveInvestmentDecision(user.id, decision);
           }
         } catch (error) {
@@ -212,7 +238,7 @@ const App: React.FC = () => {
     };
     
     saveDecisions();
-  }, [decisionsCache, user]);
+  }, [decisions, user]);
 
   // Apply theme
   useEffect(() => {
@@ -343,21 +369,8 @@ const App: React.FC = () => {
       await storageService.saveDecisionEvaluation(user.id, evaluatingDecision.id, result);
       await storageService.saveInvestmentDecision(user.id, updatedDecision);
       
-      // 更新决策缓存和摘要
-      manageCache(updatedDecision.id, updatedDecision);
-      
-      // Update summary
-      const updatedSummary: DecisionSummary = {
-        id: updatedDecision.id,
-        name: updatedDecision.name,
-        stage: updatedDecision.stage,
-        completed: updatedDecision.completed,
-        evaluated: updatedDecision.evaluated,
-        evaluationScore: updatedDecision.evaluationScore
-      };
-      await storageService.saveDecisionSummary(user.id, updatedSummary);
-      
-      setDecisionSummaries(prev => prev.map(d => d.id === updatedDecision.id ? updatedSummary : d));
+      // 更新决策列表
+      setDecisions(prev => prev.map(d => d.id === updatedDecision.id ? updatedDecision : d));
       
       // 关闭评估模态框
       setIsInvestmentEvaluationOpen(false);
@@ -386,90 +399,29 @@ const App: React.FC = () => {
   };
 
   /**
-   * Manage cache with LRU eviction policy
+   * Clear user data
    */
-  const manageCache = useCallback((decisionId: string, decision: InvestmentDecision | null) => {
-    if (!decision) return; // Don't cache null/undefined decisions
-    
-    setLruKeys(prevLruKeys => {
-      // Move the key to the end of the array to mark it as recently used
-      const newLruKeys = prevLruKeys.filter(key => key !== decisionId);
-      newLruKeys.push(decisionId);
-
-      let keyToEvict: string | undefined;
-      // If cache exceeds max size, determine which key to evict
-      if (newLruKeys.length > MAX_CACHE_SIZE) {
-        keyToEvict = newLruKeys.shift(); // Evict the least recently used key
-      }
-
-      setDecisionsCache(prevCache => {
-        const newCache = new Map(prevCache);
-        newCache.set(decisionId, decision);
-        if (keyToEvict) {
-          newCache.delete(keyToEvict);
-        }
-        return newCache;
-      });
-
-      return newLruKeys;
-    });
-  }, [MAX_CACHE_SIZE]);
-
-  /**
-   * Clear cache
-   */
-  const clearCache = () => {
-    setDecisionsCache(new Map());
-    setLruKeys([]);
+  const clearUserData = () => {
+    setDecisions([]);
+    setCurrentDecision(null);
+    setCurrentStage(1);
+    setRiskAssessmentResult(null);
   };
 
   /**
-   * Load complete decision data (lazy loading) with request deduplication
+   * Load complete decision data
    */
   const loadCompleteDecision = useCallback(async (decisionId: string): Promise<InvestmentDecision | null> => {
-    // Check cache first
-    if (decisionsCache.has(decisionId)) {
-      // Update LRU tracking when accessing cached item
-      setLruKeys(prevKeys => {
-        const newKeys = prevKeys.filter(key => key !== decisionId);
-        return [...newKeys, decisionId];
-      });
-      return decisionsCache.get(decisionId) || null;
+    if (!user) return null;
+    
+    try {
+      const completeDecision = await storageService.loadInvestmentDecision(user.id, decisionId);
+      return completeDecision;
+    } catch (error) {
+      console.error('Error loading complete decision:', error);
+      return null;
     }
-    
-    // Check if request is already in progress
-    if (pendingRequests.current.has(decisionId)) {
-      return pendingRequests.current.get(decisionId) || null;
-    }
-    
-    setLoadingDecisionId(decisionId);
-    
-    // Create the request promise
-    const requestPromise = (async () => {
-      try {
-        if (!user) return null;
-        
-        const completeDecision = await storageService.loadInvestmentDecision(user.id, decisionId);
-        if (completeDecision) {
-          // Use managed cache to add with LRU policy
-          manageCache(decisionId, completeDecision);
-          return completeDecision;
-        }
-        return null;
-      } catch (error) {
-        console.error('Error loading complete decision:', error);
-        return null;
-      } finally {
-        setLoadingDecisionId(null);
-        pendingRequests.current.delete(decisionId);
-      }
-    })();
-    
-    // Store the promise to prevent duplicate requests
-    pendingRequests.current.set(decisionId, requestPromise);
-    
-    return requestPromise;
-  }, [decisionsCache, user, manageCache]);
+  }, [user]);
 
 
   /**
@@ -612,21 +564,8 @@ const App: React.FC = () => {
       try {
         // Delete from Firebase Storage
         await storageService.deleteInvestmentDecision(user.id, decisionId);
-        // Also delete summary
-        try {
-          await storageService.deleteDecisionSummary(user.id, decisionId);
-        } catch (error) {
-          console.warn('Failed to delete decision summary:', error);
-        }
         // Update local state
-        setDecisionSummaries(decisionSummaries.filter((d) => d.id !== decisionId));
-        setDecisionsCache(prev => {
-          const newCache = new Map(prev);
-          newCache.delete(decisionId);
-          return newCache;
-        });
-        // Also remove from LRU tracking
-        setLruKeys(prev => prev.filter(key => key !== decisionId));
+        setDecisions(decisions.filter((d) => d.id !== decisionId));
         if (currentDecision?.id === decisionId) {
           setCurrentDecision(null);
           setCurrentStage(1);
@@ -641,8 +580,8 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     await logOut();
     // Clear user data and decisions
-    setDecisionSummaries([]);
-    clearCache();
+            setDecisions([]);
+        clearUserData();
     setCurrentDecision(null);
     setCurrentStage(1);
     setUser(null);
@@ -915,7 +854,7 @@ const App: React.FC = () => {
                                   opacity-0 invisible group-hover:opacity-100 group-hover:visible 
                                   transition-all duration-300 z-10 -translate-y-full -mt-2">
                       {(() => {
-                        const evaluatedDecisions = Array.from(decisionsCache.values() as InvestmentDecision[]).filter(d => d.completed && d.evaluated && d.evaluationScore !== undefined);
+                        const evaluatedDecisions = decisions.filter(d => d.completed && d.evaluated && d.evaluationScore !== undefined);
                         if (evaluatedDecisions.length === 0) {
                           return translations[language].strategyRecommendationHint;
                         }
@@ -949,19 +888,19 @@ const App: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {decisionSummaries.filter((d) => !d.completed || (d.completed && !d.evaluated)).length > 0 ? (
+                {decisions.filter((d) => !d.completed || (d.completed && !d.evaluated)).length > 0 ? (
                   <ul className="space-y-2">
-                    {decisionSummaries
-                      .filter((d) => !d.completed || (d.completed && !d.evaluated))
-                      .map((summary) => (
-                        <li
-                          key={summary.id}
-                          className="flex items-center justify-between p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer"
-                          onClick={() => startNewDecision(summary.id)}
+                                            {decisions
+                          .filter((d) => !d.completed || (d.completed && !d.evaluated))
+                          .map((decision) => (
+                            <li
+                              key={decision.id}
+                              className="flex items-center justify-between p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer"
+                              onClick={() => startNewDecision(decision.id)}
                         >
                           <span className="text-gray-900 dark:text-white">
-                            {summary.name ||
-                              `${translations[language].decisionName} ${summary.id.slice(
+                            {decision.name ||
+                              `${translations[language].decisionName} ${decision.id.slice(
                                 -4
                               )}`}
                           </span>
@@ -984,24 +923,24 @@ const App: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {decisionSummaries.filter((d) => d.completed && d.evaluated).length > 0 ? (
+                {decisions.filter((d) => d.completed && d.evaluated).length > 0 ? (
                   <ul className="space-y-2">
-                    {decisionSummaries
+                    {decisions
                       .filter((d) => d.completed && d.evaluated)
-                      .map((summary) => (
+                      .map((decision) => (
                         <li
-                          key={summary.id}
+                          key={decision.id}
                           className="flex items-center justify-between p-2 rounded-md bg-gray-200 dark:bg-gray-700"
                         >
                           <div className="flex flex-col">
                             <span className="text-gray-900 dark:text-white truncate">
-                              {summary.name ||
-                                `${translations[language].decisionName} ${summary.id.slice(
+                              {decision.name ||
+                                `${translations[language].decisionName} ${decision.id.slice(
                                   -4
                                 )}`}
                             </span>
                             <span className="text-sm text-gray-600 dark:text-gray-400">
-                              {language === 'zh' ? '评分' : 'Score'}: {summary.evaluationScore}
+                              {language === 'zh' ? '评分' : 'Score'}: {decision.evaluationScore}
                             </span>
                           </div>
                           <CheckCircle className="h-4 w-4 text-green-500 dark:text-green-400" />
@@ -1034,25 +973,12 @@ const App: React.FC = () => {
                         // Save to Firebase Storage
                         await storageService.saveInvestmentDecision(user.id, decision);
 
-                        // Create and save summary
-                        const summary: DecisionSummary = {
-                          id: decision.id,
-                          name: decision.name,
-                          stage: decision.stage,
-                          completed: decision.completed,
-                          evaluated: decision.evaluated,
-                          evaluationScore: decision.evaluationScore
-                        };
-                        await storageService.saveDecisionSummary(user.id, summary);
-                        
                         if (isEditing) {
-                          manageCache(decision.id, decision);
-                          // Update summary
-                          setDecisionSummaries(prev => prev.map(d => d.id === decision.id ? summary : d));
+                          // Update decision in list
+                          setDecisions(prev => prev.map(d => d.id === decision.id ? decision : d));
                         } else {
-                          manageCache(decision.id, decision);
-                          // Add new summary
-                          setDecisionSummaries(prev => [...prev, summary]);
+                          // Add new decision to list
+                          setDecisions(prev => [...prev, decision]);
                         }
                         setCurrentDecision(null);
                         setCurrentStage(1);
@@ -1083,45 +1009,45 @@ const App: React.FC = () => {
                   <CardContent>
                     <div className="mb-6 text-gray-900 dark:text-white">
                       {translations[language].youHaveMade}{' '}
-                      <span className="font-semibold">{decisionSummaries.length}</span>{' '}
+                      <span className="font-semibold">{decisions.length}</span>{' '}
                       {translations[language].decisions},{' '}
                       <span className="font-semibold">
-                        {decisionSummaries.filter((d) => d.completed).length}
+                        {decisions.filter((d) => d.completed).length}
                       </span>{' '}
                       {translations[language].areCompleted}
                     </div>
-                    {decisionSummaries.length === 0 ? (
+                    {decisions.length === 0 ? (
                       <p className="text-gray-500 dark:text-gray-400">
                         {translations[language].noDecisionsRecorded}
                       </p>
                     ) : (
                       <div className="space-y-4">
-                        {decisionSummaries.slice().reverse().map((summary) => (
-                          <Card
-                            key={summary.id}
-                            className={cn(
-                              'p-4 rounded-md',
-                              summary.completed && summary.evaluated
-                                ? 'bg-green-100 dark:bg-green-900/50 border border-green-400 dark:border-green-700'
-                                : summary.completed && !summary.evaluated
-                                ? 'bg-blue-100 dark:bg-blue-900/50 border border-blue-400 dark:border-blue-700'
-                                : 'bg-yellow-100 dark:bg-yellow-900/50 border border-yellow-400 dark:border-yellow-700',
-                              'flex justify-between items-center'
-                            )}
+                        {decisions.slice().reverse().map((decision) => (
+                                                      <Card
+                              key={decision.id}
+                                                            className={cn(
+                                  'p-4 rounded-md',
+                                  decision.completed && decision.evaluated
+                                    ? 'bg-green-100 dark:bg-green-900/50 border border-green-400 dark:border-green-700'
+                                    : decision.completed && !decision.evaluated
+                                    ? 'bg-blue-100 dark:bg-green-900/50 border border-blue-400 dark:border-blue-700'
+                                    : 'bg-yellow-100 dark:bg-yellow-900/50 border border-yellow-400 dark:border-yellow-700',
+                                  'flex justify-between items-center'
+                                )}
                           >
                             <div className="flex flex-col">
-                              <span className="text-gray-900 dark:text-white font-medium">
-                                {summary.name ||
-                                  `${translations[language].decisionName} ${summary.id.slice(
-                                    -4
-                                  )}`}
-                              </span>
+                                                              <span className="text-gray-900 dark:text-white font-medium">
+                                  {decision.name ||
+                                    `${translations[language].decisionName} ${decision.id.slice(
+                                      -4
+                                    )}`}
+                                </span>
                               <span className="text-sm text-gray-500 dark:text-gray-400">
-                                {translations[language].stage}: {summary.stage}/7
+                                {translations[language].stage}: {decision.stage}/7
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
-                              {summary.completed ? (
+                              {decision.completed ? (
                                 <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400" />
                               ) : (
                                 <AlertTriangle className="h-5 w-5 text-yellow-500 dark:text-yellow-400" />
@@ -1131,42 +1057,40 @@ const App: React.FC = () => {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => startNewDecision(summary.id)}
-                                  title={summary.evaluated ? (language === 'zh' ? '已评估的决策只能查看不能编辑' : 'Evaluated decisions can only be viewed, not edited') : ''}
-                                  className={cn(
-                                    'text-gray-900 dark:text-white',
-                                    summary.completed
-                                      ? 'bg-green-300/50 hover:bg-green-400/50 dark:bg-green-700/50 dark:hover:bg-green-600/50'
-                                      : 'bg-yellow-300/50 hover:bg-yellow-400/50 dark:bg-yellow-700/50 dark:hover:bg-yellow-600/50'
-                                  )}
-                                  disabled={loadingDecisionId === summary.id}
+                                  onClick={() => startNewDecision(decision.id)}
+                                  title={decision.evaluated ? (language === 'zh' ? '已评估的决策只能查看不能编辑' : 'Evaluated decisions can only be viewed, not edited') : ''}
+                                                                      className={cn(
+                                      'text-gray-900 dark:text-white',
+                                      decision.completed
+                                        ? 'bg-green-300/50 hover:bg-green-400/50 dark:bg-green-700/50 dark:hover:bg-green-600/50'
+                                        : 'bg-yellow-300/50 hover:bg-yellow-400/50 dark:bg-yellow-700/50 dark:hover:bg-yellow-600/50'
+                                    )}
+                                  disabled={false}
                                 >
-                                  {loadingDecisionId === summary.id ? (
-                                    <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
-                                  ) : summary.completed 
+                                  {decision.completed 
                                     ? (language === 'zh' ? '查看决策' : 'View Decision')
                                     : translations[language].editDecision}
                                 </Button>
                                 
                                 {/* 评估按钮 - 仅对已完成决策显示 */}
-                                {summary.completed && (
+                                {decision.completed && (
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                      onClick={async () => {
-                                      const fullDecision = await loadCompleteDecision(summary.id);
+                                                                          onClick={async () => {
+                                      const fullDecision = await loadCompleteDecision(decision.id);        
                                       if (fullDecision) {
                                         startEvaluateDecision(fullDecision);
                                       }
                                     }}
                                     className={cn(
                                       'text-gray-900 dark:text-white',
-                                      summary.evaluated
+                                      decision.evaluated
                                         ? 'bg-blue-300/50 hover:bg-blue-400/50 dark:bg-blue-700/50 dark:hover:bg-blue-600/50'
                                         : 'bg-purple-300/50 hover:bg-purple-400/50 dark:bg-purple-700/50 dark:hover:bg-purple-600/50'
                                     )}
                                   >
-                                    {summary.evaluated
+                                    {decision.evaluated
                                       ? (language === 'zh' ? '查看评估' : 'View Evaluation')
                                       : (language === 'zh' ? '评估决策' : 'Evaluate')}
                                   </Button>

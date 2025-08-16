@@ -1,5 +1,5 @@
-import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
-import { storage } from './firebase';
+import { ref, uploadBytes, deleteObject, listAll, getBytes, getDownloadURL } from 'firebase/storage';
+import { storage, auth } from './firebase';
 import {
   UserProfile,
   InvestmentDecision,
@@ -120,16 +120,26 @@ class StorageService {
    * Download and parse JSON data from Firebase Storage with retry logic
    */
   private async downloadJSON<T>(ref: any): Promise<T | null> {
-    // let lastError: Error | null = null;
-
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
+        // First try getBytes (requires auth, more secure)
+        if (auth?.currentUser) {
+          try {
+            const bytes = await getBytes(ref);
+            const text = new TextDecoder().decode(bytes);
+            return JSON.parse(text);
+          } catch (getBytesError) {
+            // If getBytes fails, fall back to getDownloadURL + fetch
+            console.warn('getBytes failed, trying fallback method:', getBytesError);
+          }
+        }
+        
+        // Fallback: use getDownloadURL + fetch (may have CORS issues but more compatible)
         const url = await getDownloadURL(ref);
         const response = await fetch(url);
         if (!response.ok) return null;
         return await response.json();
       } catch (error) {
-        // lastError = error as Error;
         console.warn(`Download attempt ${attempt} failed:`, error);
 
         // Check if error is "file not found" - don't retry for this

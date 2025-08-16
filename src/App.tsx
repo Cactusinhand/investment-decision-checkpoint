@@ -579,11 +579,7 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
     await logOut();
-    // Clear user data and decisions
-            setDecisions([]);
-        clearUserData();
-    setCurrentDecision(null);
-    setCurrentStage(1);
+    clearUserData();
     setUser(null);
     // Note: We don't clear localStorage as it contains app settings
   };
@@ -1059,13 +1055,12 @@ const App: React.FC = () => {
                                   size="sm"
                                   onClick={() => startNewDecision(decision.id)}
                                   title={decision.evaluated ? (language === 'zh' ? '已评估的决策只能查看不能编辑' : 'Evaluated decisions can only be viewed, not edited') : ''}
-                                                                      className={cn(
+                                  className={cn(
                                       'text-gray-900 dark:text-white',
                                       decision.completed
                                         ? 'bg-green-300/50 hover:bg-green-400/50 dark:bg-green-700/50 dark:hover:bg-green-600/50'
                                         : 'bg-yellow-300/50 hover:bg-yellow-400/50 dark:bg-yellow-700/50 dark:hover:bg-yellow-600/50'
                                     )}
-                                  disabled={false}
                                 >
                                   {decision.completed 
                                     ? (language === 'zh' ? '查看决策' : 'View Decision')

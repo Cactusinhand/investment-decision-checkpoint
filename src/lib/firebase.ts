@@ -22,14 +22,18 @@ const firebaseConfig = {
 };
 
 // Validate storage bucket naming to avoid misconfiguration
+const storageBucket = firebaseConfig.storageBucket;
 const isStorageBucketValid =
-  typeof firebaseConfig.storageBucket === 'string' &&
-  firebaseConfig.storageBucket.endsWith('.appspot.com');
+  typeof storageBucket === 'string' &&
+  storageBucket.endsWith('.appspot.com') &&
+  storageBucket.length > '.appspot.com'.length;
 
-if (!isStorageBucketValid) {
+if (storageBucket && !isStorageBucketValid) {
   console.error(
-    `Invalid Firebase storage bucket: ${firebaseConfig.storageBucket}. It must end with "\.appspot.com". Storage will be disabled.`
+    `Invalid Firebase storage bucket: "${storageBucket}". It must be a non-empty string ending with ".appspot.com". Storage will be disabled.`
   );
+} else if (!storageBucket) {
+  console.warn('Firebase storage bucket not provided. Storage features will be disabled.');
 }
 
 // Only initialize Firebase if we have the required configuration

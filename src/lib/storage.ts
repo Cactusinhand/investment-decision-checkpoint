@@ -45,6 +45,14 @@ class StorageService {
   private maxRetries = 3;
   private retryDelay = 1000; // 1 second
 
+  private ensureStorage(): boolean {
+    if (!this.storage) {
+      console.error('Firebase Storage is not configured or available.');
+      return false;
+    }
+    return true;
+  }
+
   /**
    * Get a storage reference for a user-specific file
    */
@@ -195,6 +203,7 @@ class StorageService {
    * Save user profile to Firebase Storage
    */
   async saveUserProfile(uid: string, profile: UserProfile): Promise<void> {
+    if (!this.ensureStorage()) return;
     const profileRef = this.getUserRef('userProfiles', uid, 'profile.json');
     await this.uploadJSON(profileRef, profile);
     
@@ -212,6 +221,7 @@ class StorageService {
    * Save user profile index to Firebase Storage (separate from full profile)
    */
   async saveUserProfileIndex(uid: string, index: UserProfileIndex): Promise<void> {
+    if (!this.ensureStorage()) return;
     const indexRef = this.getUserRef('userProfileIndexes', uid, 'index.json');
     await this.uploadJSON(indexRef, index);
   }
@@ -220,6 +230,7 @@ class StorageService {
    * Delete user profile index from Firebase Storage
    */
   async deleteUserProfileIndex(uid: string): Promise<void> {
+    if (!this.ensureStorage()) return;
     const indexRef = this.getUserRef('userProfileIndexes', uid, 'index.json');
     await deleteObject(indexRef);
   }
@@ -228,6 +239,7 @@ class StorageService {
    * Load user profile index (true index, not full profile)
    */
   async loadUserProfileIndex(uid: string): Promise<UserProfileIndex | null> {
+    if (!this.ensureStorage()) return null;
     const indexRef = this.getUserRef('userProfileIndexes', uid, 'index.json');
     return await this.downloadJSON<UserProfileIndex>(indexRef);
   }
@@ -237,6 +249,7 @@ class StorageService {
    * @deprecated Use loadUserProfileIndex instead
    */
   async loadUserProfileIndexLegacy(uid: string): Promise<UserProfileIndex | null> {
+    if (!this.ensureStorage()) return null;
     const profileRef = this.getUserRef('userProfiles', uid, 'profile.json');
     const fullProfile = await this.downloadJSON<UserProfile>(profileRef);
     if (!fullProfile) return null;
@@ -254,6 +267,7 @@ class StorageService {
    * Load user profile from Firebase Storage
    */
   async loadUserProfile(uid: string): Promise<UserProfile | null> {
+    if (!this.ensureStorage()) return null;
     const profileRef = this.getUserRef('userProfiles', uid, 'profile.json');
     return await this.downloadJSON<UserProfile>(profileRef);
   }
@@ -262,9 +276,10 @@ class StorageService {
    * Delete user profile from Firebase Storage
    */
   async deleteUserProfile(uid: string): Promise<void> {
+    if (!this.ensureStorage()) return;
     const profileRef = this.getUserRef('userProfiles', uid, 'profile.json');
     await deleteObject(profileRef);
-    
+
     // Also delete the index
     await this.deleteUserProfileIndex(uid);
   }
@@ -275,6 +290,7 @@ class StorageService {
    * Save investment decision to Firebase Storage
    */
   async saveInvestmentDecision(uid: string, decision: InvestmentDecision): Promise<void> {
+    if (!this.ensureStorage()) return;
     const decisionRef = this.getUserRef('investmentDecisions', uid, `${decision.id}.json`);
     await this.uploadJSON(decisionRef, decision);
   }
@@ -283,6 +299,7 @@ class StorageService {
    * Load investment decision from Firebase Storage
    */
   async loadInvestmentDecision(uid: string, decisionId: string): Promise<InvestmentDecision | null> {
+    if (!this.ensureStorage()) return null;
     const decisionRef = this.getUserRef('investmentDecisions', uid, `${decisionId}.json`);
     return await this.downloadJSON<InvestmentDecision>(decisionRef);
   }
@@ -292,6 +309,7 @@ class StorageService {
    * @deprecated Use loadDecisionSummaries instead
    */
   async loadDecisionSummariesLegacy(uid: string): Promise<DecisionSummary[]> {
+    if (!this.ensureStorage()) return [];
     const collectionRef = this.getUserCollectionRef('investmentDecisions', uid);
     const summaries: DecisionSummary[] = [];
 
@@ -322,6 +340,7 @@ class StorageService {
    * Save decision summary to Firebase Storage (separate from full decision)
    */
   async saveDecisionSummary(uid: string, summary: DecisionSummary): Promise<void> {
+    if (!this.ensureStorage()) return;
     const summaryRef = this.getUserRef('decisionSummaries', uid, `${summary.id}.json`);
     await this.uploadJSON(summaryRef, summary);
   }
@@ -330,6 +349,7 @@ class StorageService {
    * Delete decision summary from Firebase Storage
    */
   async deleteDecisionSummary(uid: string, decisionId: string): Promise<void> {
+    if (!this.ensureStorage()) return;
     const summaryRef = this.getUserRef('decisionSummaries', uid, `${decisionId}.json`);
     await deleteObject(summaryRef);
   }
@@ -338,6 +358,7 @@ class StorageService {
    * Load decision summaries (true summaries, not full decisions)
    */
   async loadDecisionSummaries(uid: string): Promise<DecisionSummary[]> {
+    if (!this.ensureStorage()) return [];
     const collectionRef = this.getUserCollectionRef('decisionSummaries', uid);
     const summaries: DecisionSummary[] = [];
 
@@ -360,6 +381,7 @@ class StorageService {
    * Load all investment decisions for a user
    */
   async loadAllInvestmentDecisions(uid: string): Promise<InvestmentDecision[]> {
+    if (!this.ensureStorage()) return [];
     const collectionRef = this.getUserCollectionRef('investmentDecisions', uid);
     const decisions: InvestmentDecision[] = [];
 
@@ -382,6 +404,7 @@ class StorageService {
    * Delete investment decision from Firebase Storage
    */
   async deleteInvestmentDecision(uid: string, decisionId: string): Promise<void> {
+    if (!this.ensureStorage()) return;
     const decisionRef = this.getUserRef('investmentDecisions', uid, `${decisionId}.json`);
     await deleteObject(decisionRef);
   }
@@ -392,6 +415,7 @@ class StorageService {
    * Save risk assessment result to Firebase Storage
    */
   async saveRiskAssessment(uid: string, assessment: RiskAssessmentResult): Promise<string> {
+    if (!this.ensureStorage()) return '';
     const assessmentId = `risk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const assessmentRef = this.getUserRef('riskAssessments', uid, `${assessmentId}.json`);
     await this.uploadJSON(assessmentRef, assessment);
@@ -412,6 +436,7 @@ class StorageService {
    * Load risk assessment result from Firebase Storage
    */
   async loadRiskAssessment(uid: string, assessmentId: string): Promise<RiskAssessmentResult | null> {
+    if (!this.ensureStorage()) return null;
     const assessmentRef = this.getUserRef('riskAssessments', uid, `${assessmentId}.json`);
     return await this.downloadJSON<RiskAssessmentResult>(assessmentRef);
   }
@@ -420,6 +445,7 @@ class StorageService {
    * Save risk assessment summary to Firebase Storage (separate from full assessment)
    */
   async saveRiskAssessmentSummary(uid: string, summary: RiskAssessmentSummary): Promise<void> {
+    if (!this.ensureStorage()) return;
     const summaryRef = this.getUserRef('riskAssessmentSummaries', uid, `${summary.id}.json`);
     await this.uploadJSON(summaryRef, summary);
   }
@@ -428,6 +454,7 @@ class StorageService {
    * Delete risk assessment summary from Firebase Storage
    */
   async deleteRiskAssessmentSummary(uid: string, assessmentId: string): Promise<void> {
+    if (!this.ensureStorage()) return;
     const summaryRef = this.getUserRef('riskAssessmentSummaries', uid, `${assessmentId}.json`);
     await deleteObject(summaryRef);
   }
@@ -436,6 +463,7 @@ class StorageService {
    * Load risk assessment summaries (true summaries, not full assessments)
    */
   async loadRiskAssessmentSummaries(uid: string): Promise<RiskAssessmentSummary[]> {
+    if (!this.ensureStorage()) return [];
     const collectionRef = this.getUserCollectionRef('riskAssessmentSummaries', uid);
     const summaries: RiskAssessmentSummary[] = [];
 
@@ -459,6 +487,7 @@ class StorageService {
    * @deprecated Use loadRiskAssessmentSummaries instead
    */
   async loadRiskAssessmentSummariesLegacy(uid: string): Promise<RiskAssessmentSummary[]> {
+    if (!this.ensureStorage()) return [];
     const collectionRef = this.getUserCollectionRef('riskAssessments', uid);
     const summaries: RiskAssessmentSummary[] = [];
 
@@ -487,6 +516,7 @@ class StorageService {
    * Load all risk assessments for a user
    */
   async loadAllRiskAssessments(uid: string): Promise<RiskAssessmentResult[]> {
+    if (!this.ensureStorage()) return [];
     const collectionRef = this.getUserCollectionRef('riskAssessments', uid);
     const assessments: RiskAssessmentResult[] = [];
 
@@ -509,6 +539,7 @@ class StorageService {
    * Delete risk assessment from Firebase Storage
    */
   async deleteRiskAssessment(uid: string, assessmentId: string): Promise<void> {
+    if (!this.ensureStorage()) return;
     const assessmentRef = this.getUserRef('riskAssessments', uid, `${assessmentId}.json`);
     await deleteObject(assessmentRef);
     
@@ -522,6 +553,7 @@ class StorageService {
    * Save decision evaluation result to Firebase Storage
    */
   async saveDecisionEvaluation(uid: string, decisionId: string, evaluation: EvaluationResult): Promise<void> {
+    if (!this.ensureStorage()) return;
     const evaluationRef = this.getUserRef('decisionEvaluations', uid, `${decisionId}.json`);
     await this.uploadJSON(evaluationRef, evaluation);
   }
@@ -530,6 +562,7 @@ class StorageService {
    * Load decision evaluation result from Firebase Storage
    */
   async loadDecisionEvaluation(uid: string, decisionId: string): Promise<EvaluationResult | null> {
+    if (!this.ensureStorage()) return null;
     const evaluationRef = this.getUserRef('decisionEvaluations', uid, `${decisionId}.json`);
     return await this.downloadJSON<EvaluationResult>(evaluationRef);
   }
@@ -538,6 +571,7 @@ class StorageService {
    * Delete decision evaluation from Firebase Storage
    */
   async deleteDecisionEvaluation(uid: string, decisionId: string): Promise<void> {
+    if (!this.ensureStorage()) return;
     const evaluationRef = this.getUserRef('decisionEvaluations', uid, `${decisionId}.json`);
     await deleteObject(evaluationRef);
   }
@@ -557,6 +591,16 @@ class StorageService {
       evaluations: number;
     };
   }> {
+    if (!this.ensureStorage()) return {
+      totalFiles: 0,
+      totalSize: 0,
+      breakdown: {
+        profiles: 0,
+        decisions: 0,
+        riskAssessments: 0,
+        evaluations: 0,
+      },
+    };
     const stats = {
       totalFiles: 0,
       totalSize: 0,
@@ -598,6 +642,7 @@ class StorageService {
    * Delete all user data from Firebase Storage
    */
   async deleteAllUserData(uid: string): Promise<void> {
+    if (!this.ensureStorage()) return;
     try {
       const collections = [
         'userProfiles',

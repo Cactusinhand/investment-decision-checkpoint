@@ -131,3 +131,26 @@ To enable the AI-enhanced analysis features powered by the DeepSeek API, you nee
 3.  **Deploy/Redeploy:** Trigger a new deployment on Vercel. Vercel will automatically inject the environment variable during the build process and make it available to your application at runtime (`process.env.REACT_APP_DEEPSEEK_API_KEY`).
 
 **Note:** Exposing API keys directly to the frontend (even via environment variables with prefixes) carries some security risks. For production applications requiring higher security, consider implementing a backend proxy or serverless function on Vercel to handle API calls, keeping the key securely on the server-side.
+
+### Firebase Storage CORS Configuration
+
+To upload files from the deployed application, the Firebase Storage bucket must allow cross-origin requests from your deployment domain. Create a `cors.json` file such as:
+
+```json
+[
+  {
+    "origin": ["https://your-app-domain.com"],
+    "method": ["GET", "PUT", "POST", "DELETE"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": ["Content-Type"]
+  }
+]
+```
+
+Apply the configuration to your bucket using the [gsutil](https://cloud.google.com/storage/docs/gsutil) tool:
+
+```bash
+gsutil cors set cors.json gs://your-project-id.appspot.com
+```
+
+Be sure to replace `your-project-id` with your actual Firebase project ID.

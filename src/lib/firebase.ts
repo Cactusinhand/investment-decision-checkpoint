@@ -21,6 +21,17 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
+// Validate storage bucket naming to avoid misconfiguration
+const isStorageBucketValid =
+  typeof firebaseConfig.storageBucket === 'string' &&
+  firebaseConfig.storageBucket.endsWith('.appspot.com');
+
+if (!isStorageBucketValid) {
+  console.error(
+    `Invalid Firebase storage bucket: ${firebaseConfig.storageBucket}. It must end with "\.appspot.com". Storage will be disabled.`
+  );
+}
+
 // Only initialize Firebase if we have the required configuration
 let app;
 let auth;
@@ -30,7 +41,7 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
   try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
-    storage = getStorage(app);
+    storage = isStorageBucketValid ? getStorage(app) : null;
   } catch (error) {
     console.error('Failed to initialize Firebase:', error);
     auth = null;

@@ -139,7 +139,7 @@ To upload files from the deployed application, the Firebase Storage bucket must 
 ```json
 [
   {
-    "origin": ["https://investment-decision-checkpoint.vercel.app"],
+    "origin": ["https://your-app-domain.com"],
     "method": ["GET", "PUT", "POST", "DELETE"],
     "maxAgeSeconds": 3600,
     "responseHeader": ["Content-Type"]
